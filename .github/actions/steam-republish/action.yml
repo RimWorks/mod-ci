@@ -1,0 +1,58 @@
+name: steam republish
+description: Push the built mod to its Steam Workshop item, for a verification run with no code changes.
+
+inputs:
+  steam-username:
+    description: Steam account that owns the workshop item
+    required: true
+  steam-config-vdf-b64:
+    description: Base64 of a logged-in config.vdf, so steamcmd needs no password
+    required: true
+  workshop-id:
+    description: Overrides the id baked into the repo's bump script
+    default: ''
+  verified-rimworld:
+    description: Resolved RimWorld ref, quoted in the changenote
+    default: ''
+  verified-tests:
+    description: Passing test count, quoted in the changenote
+    default: ''
+  script:
+    description: Node entry point that stages and pushes
+    default: scripts/workshop-bump.mjs
+
+runs:
+  using: composite
+  steps:
+    - name: Set up SteamCMD
+      uses: buildalon/setup-steamcmd@2a16e8f482192d9a5710a17f0119890ceb1f48a1 # v1
+
+    - name: Restore Steam config
+      shell: bash
+      env:
+        STEAM_CONFIG_VDF_B64: ${{ inputs.steam-config-vdf-b64 }}
+      run: |
+        mkdir -p "$STEAM_DIR/config"
+        printf '%s' "$STEAM_CONFIG_VDF_B64" | base64 -d > "$STEAM_DIR/config/config.vdf"
+        echo "STEAM_CONFIG_VDF=$STEAM_DIR/config/config.vdf" >> "$GITHUB_ENV"
+
+    # Fails here rather than halfway through a push, where the item is already half-updated.
+    - name: Steam login preflight
+      shell: bash
+      env:
+        STEAM_USERNAME: ${{ inputs.steam-username }}
+      run: |
+        "$STEAM_CMD/steamcmd.sh" +@ShutdownOnFailedCommand 1 +@NoPromptForPassword 1 \
+          +login "$STEAM_USERNAME" +quit
+
+    - name: Republish
+      shell: bash
+      env:
+        STEAM_USERNAME: ${{ inputs.steam-username }}
+        STEAM_CONFIG_VDF: ${{ env.STEAM_CONFIG_VDF }}
+        STEAMCMD_PATH: ${{ env.STEAM_CMD }}/steamcmd.sh
+        WORKSHOP_ID: ${{ inputs.workshop-id }}
+        VERIFIED_COMMIT: ${{ github.sha }}
+        VERIFIED_RIMWORLD: ${{ inputs.verified-rimworld }}
+        VERIFIED_TESTS: ${{ inputs.verified-tests }}
+      run: node "${{ inputs.script }}"

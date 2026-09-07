@@ -131,6 +131,23 @@ The analyzer gate runs `dotnet format analyzers --severity info`. MSTest and CA 
 severity, which `dotnet build` never prints, so without the gate they reach a human as a
 SonarCloud issue days later. Pass `analyzer-severity: none` to skip it.
 
+### steam-republish
+
+Pushes an already-built mod to its Steam Workshop item. Used by `weekly-verify`, where the run
+verifies against the current RimWorld and republishes with no code changes.
+
+```yaml
+      - uses: RimWorks/mod-ci/.github/actions/steam-republish@<sha>
+        with:
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+          verified-rimworld: ${{ env.RIMWORLD_REF }}
+          verified-tests: ${{ env.TESTS_PASSED }}
+```
+
+The repo's `scripts/workshop-bump.mjs` reads `WORKSHOP_ID` and falls back to the id baked into
+the script, so `workshop-id` is only needed to point a run at a different item.
+
 ## Development
 
 ```bash
