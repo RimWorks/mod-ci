@@ -3,7 +3,8 @@ export default {
   plugins: [
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
-    '@semantic-release/npm',
+    // no npm plugin: consumers install straight from the git tag, so nothing is published
+    // and nothing has to be committed back to main
     '@semantic-release/github',
   ],
 };

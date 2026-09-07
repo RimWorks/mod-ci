@@ -8,8 +8,11 @@ Used by [RimLogging][rl], [Pickle][pk], [Quickstarts][qs] and [RimObs][ro].
 ## Install
 
 ```bash
-npm install --save-dev @rimworks/mod-ci
+npm install --save-dev github:RimWorks/mod-ci#v1.0.0
 ```
+
+It is not on npm. Consumers install from the git tag, so the release never has to push a version
+commit back to a protected branch.
 
 `bumpWorkshop` also needs `semantic-release-steam`. It is an optional peer dependency, so install
 it only in repos that publish to the Steam Workshop.
