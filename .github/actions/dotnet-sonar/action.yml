@@ -1,0 +1,111 @@
+name: dotnet sonar
+description: Build, gate on analyzers, test and cover a RimWorks mod inside a SonarCloud scan.
+
+inputs:
+  solution:
+    description: Solution or project to build and test
+    required: true
+  project-key:
+    description: SonarCloud project key
+    required: true
+  sonar-token:
+    description: SonarCloud token
+    required: true
+  organization:
+    description: SonarCloud organization
+    default: rimworks
+  dotnet-version:
+    description: SDK to install
+    default: 10.0.x
+  configuration:
+    description: Build configuration
+    default: Release
+  exclusions:
+    description: Value for sonar.exclusions
+    default: ''
+  coverage-exclusions:
+    description: Value for sonar.coverage.exclusions
+    default: ''
+  extra-begin-args:
+    description: "Extra /d: args appended to scanner begin, for example a javascript lcov path"
+    default: ''
+  analyzer-severity:
+    description: Severity for the analyzer gate, or 'none' to skip it
+    default: info
+
+runs:
+  using: composite
+  steps:
+    - name: Setup JDK
+      uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      with:
+        java-version: 17
+        distribution: zulu
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - name: Cache Sonar packages
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.sonar/cache
+        key: ${{ runner.os }}-sonar
+        restore-keys: ${{ runner.os }}-sonar
+
+    - name: Cache Sonar scanner
+      id: cache-scanner
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/scanner
+        key: ${{ runner.os }}-sonar-scanner
+        restore-keys: ${{ runner.os }}-sonar-scanner
+
+    - name: Install Sonar scanner
+      if: steps.cache-scanner.outputs.cache-hit != 'true'
+      shell: bash
+      run: dotnet tool update dotnet-sonarscanner --tool-path "${{ runner.temp }}/scanner"
+
+    - name: Begin analysis
+      shell: bash
+      env:
+        SONAR_TOKEN: ${{ inputs.sonar-token }}
+      run: |
+        "${{ runner.temp }}/scanner/dotnet-sonarscanner" begin \
+          /k:"${{ inputs.project-key }}" \
+          /o:"${{ inputs.organization }}" \
+          /d:sonar.token="$SONAR_TOKEN" \
+          /d:sonar.host.url="https://sonarcloud.io" \
+          /d:sonar.exclusions="${{ inputs.exclusions }}" \
+          /d:sonar.coverage.exclusions="${{ inputs.coverage-exclusions }}" \
+          /d:sonar.cs.opencover.reportsPaths="artifacts/coverage/**/coverage.opencover.xml" \
+          ${{ inputs.extra-begin-args }}
+
+    - name: Build
+      shell: bash
+      run: dotnet build "${{ inputs.solution }}" -c "${{ inputs.configuration }}"
+
+    # MSTEST and CA rules ship at info severity, which dotnet build never prints. Without this
+    # they reach a human as a SonarCloud issue days later instead of as a red build.
+    - name: Analyzer gate
+      if: inputs.analyzer-severity != 'none'
+      shell: bash
+      run: |
+        dotnet format analyzers "${{ inputs.solution }}" \
+          --severity "${{ inputs.analyzer-severity }}" --verify-no-changes --no-restore
+
+    # coverlet only records hits for a modern assembly, so the mod needs a net10.0 build
+    # alongside the net472 one the game loads.
+    - name: Test and collect coverage
+      shell: bash
+      run: |
+        dotnet test "${{ inputs.solution }}" -c "${{ inputs.configuration }}" --no-build \
+          --collect:"XPlat Code Coverage;Format=opencover" \
+          --results-directory artifacts/coverage
+
+    - name: End analysis
+      shell: bash
+      env:
+        SONAR_TOKEN: ${{ inputs.sonar-token }}
+      run: '"${{ runner.temp }}/scanner/dotnet-sonarscanner" end /d:sonar.token="$SONAR_TOKEN"'

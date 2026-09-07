@@ -98,6 +98,39 @@ jobs:
 `dependabot-automerge` merges patch and minor updates. Major updates stay open for a human,
 because MSTest 3 to 4 and TypeScript 5 to 7 both broke the build.
 
+## Composite actions
+
+### dotnet-sonar
+
+Builds a mod, gates on analyzers, runs the tests and reports coverage to SonarCloud.
+
+It is an action rather than a reusable workflow because Pickle stages game assemblies from a
+container and RimObs builds a dashboard, both in the same job as the build. You cannot inject
+steps into a called workflow, but a composite action drops into the caller's job.
+
+The caller does its own checkout, because Sonar needs the full history to scope new code:
+
+```yaml
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v1
+        with:
+          solution: Quickstarts.slnx
+          project-key: RimWorks_Rimworld-Quickstarts
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          coverage-exclusions: Source/Quickstarts/UI/**
+```
+
+Coverage comes from `coverlet.collector`, which records hits only for a modern assembly. A mod
+targeting `net472` alone reports 0% and no error. Give the mod project `net472;net10.0` and point
+the test project at the net10.0 build. `net472` stays the only build the game loads.
+
+The analyzer gate runs `dotnet format analyzers --severity info`. MSTest and CA rules ship at info
+severity, which `dotnet build` never prints, so without the gate they reach a human as a
+SonarCloud issue days later. Pass `analyzer-severity: none` to skip it.
+
 ## Development
 
 ```bash
