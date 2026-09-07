@@ -1,0 +1,37 @@
+name: steam login
+description: Install SteamCMD and restore a logged-in config, exporting the paths a later step needs.
+
+inputs:
+  steam-config-vdf-b64:
+    description: Base64 of a logged-in config.vdf, so steamcmd needs no password
+    required: true
+  steam-username:
+    description: Set to log in up front, so a stale config fails here and not mid-publish
+    default: ''
+
+# STEAM_CONFIG_VDF and STEAMCMD_PATH land in the job env, which is what
+# semantic-release-steam reads. steam-republish pushes itself and does not use this.
+runs:
+  using: composite
+  steps:
+    - name: Set up SteamCMD
+      uses: buildalon/setup-steamcmd@2a16e8f482192d9a5710a17f0119890ceb1f48a1 # v1
+
+    - name: Restore Steam config
+      shell: bash
+      env:
+        STEAM_CONFIG_VDF_B64: ${{ inputs.steam-config-vdf-b64 }}
+      run: |
+        mkdir -p "$STEAM_DIR/config"
+        printf '%s' "$STEAM_CONFIG_VDF_B64" | base64 -d > "$STEAM_DIR/config/config.vdf"
+        echo "STEAM_CONFIG_VDF=$STEAM_DIR/config/config.vdf" >> "$GITHUB_ENV"
+        echo "STEAMCMD_PATH=$STEAM_CMD/steamcmd.sh" >> "$GITHUB_ENV"
+
+    - name: Steam login preflight
+      if: inputs.steam-username != ''
+      shell: bash
+      env:
+        STEAM_USERNAME: ${{ inputs.steam-username }}
+      run: |
+        "$STEAM_CMD/steamcmd.sh" +@ShutdownOnFailedCommand 1 +@NoPromptForPassword 1 \
+          +login "$STEAM_USERNAME" +quit
