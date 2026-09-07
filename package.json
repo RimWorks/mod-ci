@@ -1,0 +1,44 @@
+{
+  "name": "@rimworks/mod-ci",
+  "version": "0.0.0-semantically-released",
+  "description": "Shared release plumbing for the RimWorks RimWorld mods: publish stamps, Workshop bumps, and release-zip checks.",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./lib/*": "./lib/*"
+  },
+  "bin": {
+    "verify-ship-list": "./bin/verify-ship-list.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "lib/",
+    "bin/",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "semantic-release-steam": ">=2"
+  },
+  "peerDependenciesMeta": {
+    "semantic-release-steam": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RimWorks/mod-ci.git"
+  },
+  "license": "MIT"
+}

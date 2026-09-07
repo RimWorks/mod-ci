@@ -1,0 +1,20 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm test
+
+      # the checker has to work against a real consumer, not just its own fixtures
+      - name: Check this repo has no cp step to verify
+        run: node bin/verify-ship-list.mjs .
