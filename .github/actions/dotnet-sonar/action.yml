@@ -32,6 +32,9 @@ inputs:
   analyzer-severity:
     description: Severity for the analyzer gate, or 'none' to skip it
     default: info
+  test-filter:
+    description: dotnet test --filter, to keep timing-sensitive tests out of an instrumented run
+    default: ''
 
 runs:
   using: composite
@@ -116,10 +119,16 @@ runs:
     # alongside the net472 one the game loads.
     - name: Test and collect coverage
       shell: bash
+      env:
+        TEST_FILTER: ${{ inputs.test-filter }}
       run: |
+        filter=()
+        if [ -n "$TEST_FILTER" ]; then
+          filter=(--filter "$TEST_FILTER")
+        fi
         dotnet test "${{ inputs.solution }}" -c "${{ inputs.configuration }}" --no-build \
           --collect:"XPlat Code Coverage;Format=opencover" \
-          --results-directory artifacts/coverage
+          --results-directory artifacts/coverage "${filter[@]}"
 
     - name: End analysis
       shell: bash
