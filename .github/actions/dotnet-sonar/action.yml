@@ -71,16 +71,33 @@ runs:
       shell: bash
       env:
         SONAR_TOKEN: ${{ inputs.sonar-token }}
+        PROJECT_KEY: ${{ inputs.project-key }}
+        ORGANIZATION: ${{ inputs.organization }}
+        EXCLUSIONS: ${{ inputs.exclusions }}
+        COVERAGE_EXCLUSIONS: ${{ inputs.coverage-exclusions }}
+        EXTRA_BEGIN_ARGS: ${{ inputs.extra-begin-args }}
+        SCANNER: ${{ runner.temp }}/scanner/dotnet-sonarscanner
       run: |
-        "${{ runner.temp }}/scanner/dotnet-sonarscanner" begin \
-          /k:"${{ inputs.project-key }}" \
-          /o:"${{ inputs.organization }}" \
-          /d:sonar.token="$SONAR_TOKEN" \
-          /d:sonar.host.url="https://sonarcloud.io" \
-          /d:sonar.exclusions="${{ inputs.exclusions }}" \
-          /d:sonar.coverage.exclusions="${{ inputs.coverage-exclusions }}" \
-          /d:sonar.cs.opencover.reportsPaths="artifacts/coverage/**/coverage.opencover.xml" \
-          ${{ inputs.extra-begin-args }}
+        # An empty /d: value is a hard error, so the optional ones are only added when set.
+        args=(
+          begin
+          /k:"$PROJECT_KEY"
+          /o:"$ORGANIZATION"
+          /d:sonar.token="$SONAR_TOKEN"
+          /d:sonar.host.url="https://sonarcloud.io"
+          /d:sonar.cs.opencover.reportsPaths="artifacts/coverage/**/coverage.opencover.xml"
+        )
+        if [ -n "$EXCLUSIONS" ]; then
+          args+=(/d:sonar.exclusions="$EXCLUSIONS")
+        fi
+        if [ -n "$COVERAGE_EXCLUSIONS" ]; then
+          args+=(/d:sonar.coverage.exclusions="$COVERAGE_EXCLUSIONS")
+        fi
+        # set -f so the ** in a resourceKey is passed through instead of glob-expanded.
+        set -f
+        extra=($EXTRA_BEGIN_ARGS)
+        set +f
+        "$SCANNER" "${args[@]}" "${extra[@]}"
 
     - name: Build
       shell: bash
