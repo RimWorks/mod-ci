@@ -48,3 +48,22 @@ test('a repo with no release config is an error, not a silent pass', async () =>
   const root = await mkdtemp(join(tmpdir(), 'shiplist-'));
   await assert.rejects(() => missingFromReleaseZip(root), /no release.config.mjs/);
 });
+
+const PICKLE_ZIP =
+  'zip -r Pickle-${nextRelease.version}.zip About Assemblies Harmony Concord Languages Pickle loadFolders.xml -x "*.pdb" "About/Preview.xcf"';
+
+test('reads the zip -r form the other three repos use', () => {
+  assert.deepEqual(shippedPaths(PICKLE_ZIP), [
+    'About', 'Assemblies', 'Harmony', 'Concord', 'Languages', 'Pickle', 'loadFolders.xml',
+  ]);
+});
+
+test('the -x exclusions are not mistaken for shipped paths', () => {
+  assert.ok(!shippedPaths(PICKLE_ZIP).includes('*.pdb'));
+});
+
+test('catches the Defs and Patches Pickle omits from its zip', async () => {
+  const root = await repoWith(PICKLE_ZIP, ['About', 'Defs', 'Languages', 'Patches']);
+  const { missing } = await missingFromReleaseZip(root);
+  assert.deepEqual(missing, ['Defs', 'Patches']);
+});

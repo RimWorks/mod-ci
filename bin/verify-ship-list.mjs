@@ -2,7 +2,16 @@
 import { missingFromReleaseZip } from '../lib/ship-list.mjs';
 
 const root = process.argv[2] ?? process.cwd();
-const { shipped, missing } = await missingFromReleaseZip(root);
+
+let result;
+try {
+  result = await missingFromReleaseZip(root);
+} catch (err) {
+  console.error(`verify-ship-list: ${err.message}`);
+  process.exit(2);
+}
+
+const { shipped, missing } = result;
 
 if (shipped === null) {
   console.log('no "cp -r ... dist/" step in release.config.mjs, nothing to check');
