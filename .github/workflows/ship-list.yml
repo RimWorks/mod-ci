@@ -1,0 +1,23 @@
+name: ship-list
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: mod-ci tag to run the checker from
+        type: string
+        default: v1.0.2
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      # Steam rsyncs the mod dir by exclusion, the GitHub zip uses an allowlist. This is the
+      # only thing that notices when the two drift.
+      - name: Verify the release zip ships every mod content directory
+        run: npx --yes --package="github:RimWorks/mod-ci#${{ inputs.ref }}" verify-ship-list .
