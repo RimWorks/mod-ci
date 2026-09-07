@@ -115,7 +115,7 @@ The caller does its own checkout, because Sonar needs the full history to scope 
         with:
           fetch-depth: 0
 
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@2a4af7891b92cd20917a0dd9f726532314a602a1 # v1.2.0
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@5698991b43ade4de809d49d9695ac88e0895b298 # v1.2.1
         with:
           solution: Quickstarts.slnx
           project-key: RimWorks_Rimworld-Quickstarts
