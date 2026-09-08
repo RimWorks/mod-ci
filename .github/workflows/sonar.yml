@@ -64,8 +64,7 @@ on:
         type: string
         default: ''
     secrets:
-      # must match the repo secret name so callers can use `secrets: inherit`.
-      # secret names cannot contain a hyphen.
+      # matches the repo secret name. secret names cannot contain a hyphen.
       SONAR_TOKEN:
         required: true
 
