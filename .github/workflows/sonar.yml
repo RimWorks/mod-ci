@@ -106,7 +106,7 @@ jobs:
 
       # pinned to a tag rather than ./ because a called workflow only ever has the caller's
       # repo checked out.
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v1.3.0
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v1.4.1
         with:
           solution: ${{ inputs.solution }}
           project-key: ${{ inputs.project-key }}

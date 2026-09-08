@@ -80,6 +80,9 @@ runs:
         COVERAGE_EXCLUSIONS: ${{ inputs.coverage-exclusions }}
         EXTRA_BEGIN_ARGS: ${{ inputs.extra-begin-args }}
         SCANNER: ${{ runner.temp }}/scanner/dotnet-sonarscanner
+        # git bash rewrites a leading-slash argument into a windows path, which strips the
+        # slash the scanner needs. only bites on windows runners.
+        MSYS2_ARG_CONV_EXCL: "*"
       run: |
         # An empty /d: value is a hard error, so the optional ones are only added when set.
         args=(
@@ -134,4 +137,5 @@ runs:
       shell: bash
       env:
         SONAR_TOKEN: ${{ inputs.sonar-token }}
+        MSYS2_ARG_CONV_EXCL: "*"
       run: '"${{ runner.temp }}/scanner/dotnet-sonarscanner" end /d:sonar.token="$SONAR_TOKEN"'
