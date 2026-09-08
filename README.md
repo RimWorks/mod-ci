@@ -92,7 +92,6 @@ on: pull_request_target
 jobs:
   automerge:
     uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@v1
-    secrets: inherit
 ```
 
 `dependabot-automerge` merges patch and minor updates. Major updates stay open for a human,
