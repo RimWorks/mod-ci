@@ -1,9 +1,12 @@
 name: test
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
+
+# release.yml grants write scopes; a called workflow inherits them unless it drops them.
+permissions:
+  contents: read
 
 jobs:
   test:

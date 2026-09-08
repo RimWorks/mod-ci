@@ -1,0 +1,30 @@
+name: prose
+
+on:
+  workflow_call:
+    inputs:
+      extra-command:
+        description: Extra check run after vale, for example a step docs catalogue check
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+# no concurrency here: github.ref is the caller's, so two callers on one ref would cancel each other
+
+jobs:
+  prose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Vale
+        uses: errata-ai/vale-action@518a9136acc6e6668ce7c00d367051e0941e87ff # reviewdog
+        with:
+          reporter: github-pr-check
+          fail_on_error: true
+
+      - name: Extra check
+        if: inputs.extra-command != ''
+        run: ${{ inputs.extra-command }}

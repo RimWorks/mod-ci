@@ -1,0 +1,27 @@
+name: links
+
+on:
+  workflow_call:
+    inputs:
+      args:
+        description: lychee args, the file globs to check
+        type: string
+        default: --config lychee.toml --no-progress README.md
+
+permissions:
+  contents: read
+
+# no concurrency here: github.ref is the caller's, so two callers on one ref would cancel each other
+
+jobs:
+  links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Relative links break silently when a folder is renamed.
+      - name: Check links
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
+        with:
+          args: ${{ inputs.args }}
+          fail: true

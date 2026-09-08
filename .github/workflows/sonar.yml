@@ -1,0 +1,122 @@
+name: sonar
+
+on:
+  workflow_call:
+    inputs:
+      solution:
+        description: Solution or project to build and test
+        type: string
+        required: true
+      project-key:
+        description: SonarCloud project key
+        type: string
+        required: true
+      organization:
+        description: SonarCloud organization
+        type: string
+        default: rimworks
+      runner:
+        description: Runner label, windows-latest for repos that need it
+        type: string
+        default: ubuntu-latest
+      dotnet-version:
+        description: SDK to install
+        type: string
+        default: 10.0.x
+      configuration:
+        description: Build configuration
+        type: string
+        default: Release
+      exclusions:
+        description: Value for sonar.exclusions
+        type: string
+        default: ''
+      coverage-exclusions:
+        description: Value for sonar.coverage.exclusions
+        type: string
+        default: ''
+      extra-begin-args:
+        description: "Extra /d: args appended to scanner begin, for example a javascript lcov path"
+        type: string
+        default: ''
+      analyzer-severity:
+        description: Severity for the analyzer gate, or 'none' to skip it
+        type: string
+        default: info
+      test-filter:
+        description: dotnet test --filter, to keep timing-sensitive tests out of an instrumented run
+        type: string
+        default: ''
+      pre-scan-command:
+        description: Bash command run before the scan, for a frontend build that produces lcov
+        type: string
+        default: ''
+      node-version:
+        description: Node to install before the pre-scan, empty to skip node entirely
+        type: string
+        default: ''
+      package-manager:
+        description: "'pnpm' installs pnpm and caches its store, empty means npm with no cache"
+        type: string
+        default: ''
+      cache-dependency-path:
+        description: Lockfile the node cache keys on
+        type: string
+        default: ''
+    secrets:
+      # must match the repo secret name so callers can use `secrets: inherit`.
+      # secret names cannot contain a hyphen.
+      SONAR_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+# no concurrency here: github.ref is the caller's, so two callers on one ref would cancel each other
+
+jobs:
+  analyze:
+    # dependabot PRs get no repository secrets, so SONAR_TOKEN is empty and the scan cannot authenticate.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Sonar needs full history to blame lines and scope new code.
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        if: inputs.package-manager == 'pnpm'
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          run_install: false
+
+      # setup-node reads the pnpm store path, so pnpm has to exist before this runs.
+      - name: Setup Node
+        if: inputs.node-version != ''
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.package-manager }}
+          cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+      - name: Pre-scan
+        if: inputs.pre-scan-command != ''
+        shell: bash
+        run: ${{ inputs.pre-scan-command }}
+
+      # pinned to a tag rather than ./ because a called workflow only ever has the caller's
+      # repo checked out.
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v1.3.0
+        with:
+          solution: ${{ inputs.solution }}
+          project-key: ${{ inputs.project-key }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          organization: ${{ inputs.organization }}
+          dotnet-version: ${{ inputs.dotnet-version }}
+          configuration: ${{ inputs.configuration }}
+          exclusions: ${{ inputs.exclusions }}
+          coverage-exclusions: ${{ inputs.coverage-exclusions }}
+          extra-begin-args: ${{ inputs.extra-begin-args }}
+          analyzer-severity: ${{ inputs.analyzer-severity }}
+          test-filter: ${{ inputs.test-filter }}
