@@ -80,7 +80,7 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Sonar needs full history to blame lines and scope new code.
           fetch-depth: 0
@@ -94,7 +94,7 @@ jobs:
       # setup-node reads the pnpm store path, so pnpm has to exist before this runs.
       - name: Setup Node
         if: inputs.node-version != ''
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ inputs.node-version }}
           cache: ${{ inputs.package-manager }}
