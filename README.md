@@ -8,7 +8,7 @@ Used by [RimLogging][rl], [Pickle][pk], [Quickstarts][qs] and [RimObs][ro].
 ## Install
 
 ```bash
-npm install --save-dev github:RimWorks/mod-ci#v1.0.0
+npm install --save-dev github:RimWorks/mod-ci#v1.5.0
 ```
 
 It is not on npm. Consumers install from the git tag, so the release never has to push a version
@@ -39,9 +39,6 @@ await writeStamp({ solution: 'RimWorks.RimLogging.sln' });
 
 The stamp reads `VERIFIED_COMMIT` and `VERIFIED_TESTS` from the environment when they are set.
 Omit `solution` and the stamp still writes, but without the package table.
-
-The old per-repo copies took no `solution` argument. They read a hardcoded default instead, and
-changing that default was the only difference between the four files.
 
 ### bumpWorkshop
 
@@ -91,7 +88,7 @@ on: pull_request_target
 
 jobs:
   automerge:
-    uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@v1
+    uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@<sha> # v1.5.0
 ```
 
 `dependabot-automerge` merges patch and minor updates. Major updates stay open for a human,
@@ -103,7 +100,7 @@ than one workflow in the same repo usually needs them.
 
 ```yaml
   dashboard:
-    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@v1
+    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@<sha> # v1.5.0
     with:
       working-directory: Dashboard
       lint: true
@@ -111,6 +108,31 @@ than one workflow in the same repo usually needs them.
 ```
 
 `artifact-path` defaults to `dist`, relative to `working-directory`.
+
+`codeql` runs GitHub code scanning. The caller owns the triggers and has to grant
+`security-events: write`, because a called workflow cannot widen the caller's scopes.
+
+```yaml
+name: codeql
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
+
+jobs:
+  analyze:
+    uses: RimWorks/mod-ci/.github/workflows/codeql.yml@<sha> # v1.5.0
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      languages: '["csharp", "actions"]'
+```
+
+`languages` is a JSON array and defaults to `["actions"]`, which every repo here can run.
 
 ## Composite actions
 
@@ -129,7 +151,7 @@ The caller does its own checkout, because Sonar needs the full history to scope 
         with:
           fetch-depth: 0
 
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@5698991b43ade4de809d49d9695ac88e0895b298 # v1.2.1
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@<sha> # v1.5.0
         with:
           solution: Quickstarts.slnx
           project-key: RimWorks_Rimworld-Quickstarts
@@ -151,7 +173,7 @@ Pushes an already-built mod to its Steam Workshop item. Used by `weekly-verify`,
 verifies against the current RimWorld and republishes with no code changes.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/steam-republish@<sha>
+      - uses: RimWorks/mod-ci/.github/actions/steam-republish@<sha> # v1.5.0
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
@@ -168,7 +190,7 @@ the script, so `workshop-id` is only needed to point a run at a different item.
 npm test
 ```
 
-Tests use the built-in Node test runner. No framework, no fixtures directory.
+Tests use the built-in Node test runner, so there is nothing else to install.
 
 [rl]: https://github.com/RimWorks/rimworld-logging-framework
 [pk]: https://github.com/RimWorks/Rimworld-Pickle

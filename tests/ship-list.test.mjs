@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 import { shippedPaths, missingFromReleaseZip } from '../lib/ship-list.mjs';
 
@@ -66,4 +66,22 @@ test('catches the Defs and Patches Pickle omits from its zip', async () => {
   const root = await repoWith(PICKLE_ZIP, ['About', 'Defs', 'Languages', 'Patches']);
   const { missing } = await missingFromReleaseZip(root);
   assert.deepEqual(missing, ['Defs', 'Patches']);
+});
+
+test('every read stays inside the root it was given', async () => {
+  const root = await repoWith(PICKLE_ZIP, ['About', 'Defs']);
+  const { missing } = await missingFromReleaseZip(`${root}${sep}About${sep}..`);
+  assert.deepEqual(missing, ['Defs']);
+});
+
+test('a plain relative path still reads the repo it points at', async () => {
+  const root = await repoWith(PICKLE_ZIP, ['About', 'Defs']);
+  const back = process.cwd();
+  process.chdir(root);
+  try {
+    const { missing } = await missingFromReleaseZip('.');
+    assert.deepEqual(missing, ['Defs']);
+  } finally {
+    process.chdir(back);
+  }
 });

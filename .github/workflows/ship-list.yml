@@ -4,20 +4,19 @@ on:
   workflow_call:
     inputs:
       ref:
-        description: mod-ci tag to run the checker from
+        description: mod-ci commit sha to run the checker from
         type: string
-        default: v1.0.2
+        default: eae5a8f32bee86128ae88bf8821ebaca65ddc1e9 # v1.4.1
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
 
-      # Steam rsyncs the mod dir by exclusion, the GitHub zip uses an allowlist. This is the
-      # only thing that notices when the two drift.
+      # Steam rsyncs by exclusion, the zip uses an allowlist. nothing else notices the drift
       - name: Verify the release zip ships every mod content directory
         run: npx --yes --package="github:RimWorks/mod-ci#${{ inputs.ref }}" verify-ship-list .

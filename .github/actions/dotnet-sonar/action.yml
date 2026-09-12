@@ -62,13 +62,12 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/scanner
-        key: ${{ runner.os }}-sonar-scanner
-        restore-keys: ${{ runner.os }}-sonar-scanner
+        key: ${{ runner.os }}-sonar-scanner-11.3.0
 
     - name: Install Sonar scanner
       if: steps.cache-scanner.outputs.cache-hit != 'true'
       shell: bash
-      run: dotnet tool update dotnet-sonarscanner --tool-path "${{ runner.temp }}/scanner"
+      run: dotnet tool install dotnet-sonarscanner --version 11.3.0 --tool-path "${{ runner.temp }}/scanner"
 
     - name: Begin analysis
       shell: bash
@@ -80,8 +79,7 @@ runs:
         COVERAGE_EXCLUSIONS: ${{ inputs.coverage-exclusions }}
         EXTRA_BEGIN_ARGS: ${{ inputs.extra-begin-args }}
         SCANNER: ${{ runner.temp }}/scanner/dotnet-sonarscanner
-        # git bash rewrites a leading-slash argument into a windows path, which strips the
-        # slash the scanner needs. only bites on windows runners.
+        # git bash rewrites a leading-slash arg into a windows path, stripping the slash
         MSYS2_ARG_CONV_EXCL: "*"
       run: |
         # An empty /d: value is a hard error, so the optional ones are only added when set.
@@ -109,8 +107,7 @@ runs:
       shell: bash
       run: dotnet build "${{ inputs.solution }}" -c "${{ inputs.configuration }}"
 
-    # MSTEST and CA rules ship at info severity, which dotnet build never prints. Without this
-    # they reach a human as a SonarCloud issue days later instead of as a red build.
+    # MSTEST and CA ship at info severity, which dotnet build never prints
     - name: Analyzer gate
       if: inputs.analyzer-severity != 'none'
       shell: bash
@@ -118,8 +115,7 @@ runs:
         dotnet format analyzers "${{ inputs.solution }}" \
           --severity "${{ inputs.analyzer-severity }}" --verify-no-changes --no-restore
 
-    # coverlet only records hits for a modern assembly, so the mod needs a net10.0 build
-    # alongside the net472 one the game loads.
+    # coverlet only records hits for a modern assembly, hence the net10.0 build
     - name: Test and collect coverage
       shell: bash
       env:

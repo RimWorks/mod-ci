@@ -9,8 +9,7 @@ inputs:
     description: Set to log in up front, so a stale config fails here and not mid-publish
     default: ''
 
-# STEAM_CONFIG_VDF and STEAMCMD_PATH land in the job env, which is what
-# semantic-release-steam reads. steam-republish pushes itself and does not use this.
+# STEAM_CONFIG_VDF and STEAMCMD_PATH land in the job env for semantic-release-steam.
 runs:
   using: composite
   steps:

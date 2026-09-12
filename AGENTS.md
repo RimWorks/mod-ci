@@ -29,7 +29,8 @@ why this exists. See `README.md` for the consumer setup.
 - `bin/verify-ship-list.mjs` - the CLI
 - `index.mjs` - the package entry point
 - `tests/` - `node:test` suites, one per lib module
-- `.github/workflows/` - tests, release, and the reusable ship-list workflow
+- `.github/workflows/` - release and self-scan, plus the reusable workflows consumers call:
+  `codeql`, `dependabot-automerge`, `links`, `node-build`, `prose`, `ship-list`, `sonar`, `test`
 
 ## Setup & build
 
@@ -44,8 +45,6 @@ npm test                                # node --test tests/*.test.mjs
 node --test tests/ship-list.test.mjs    # one file
 node bin/verify-ship-list.mjs .         # run the checker against this repo
 ```
-
-There is no linter or typechecker configured here.
 
 - Run the full suite before committing. All tests must pass.
 - While iterating, run the single test closest to your change.

@@ -79,7 +79,7 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Sonar needs full history to blame lines and scope new code.
           fetch-depth: 0
@@ -93,7 +93,7 @@ jobs:
       # setup-node reads the pnpm store path, so pnpm has to exist before this runs.
       - name: Setup Node
         if: inputs.node-version != ''
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ inputs.node-version }}
           cache: ${{ inputs.package-manager }}
@@ -104,9 +104,8 @@ jobs:
         shell: bash
         run: ${{ inputs.pre-scan-command }}
 
-      # pinned to a tag rather than ./ because a called workflow only ever has the caller's
-      # repo checked out.
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v1.4.1
+      # sha rather than ./ because a called workflow only has the caller's repo checked out
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@eae5a8f32bee86128ae88bf8821ebaca65ddc1e9 # v1.4.1
         with:
           solution: ${{ inputs.solution }}
           project-key: ${{ inputs.project-key }}
