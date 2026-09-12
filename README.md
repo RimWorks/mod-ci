@@ -97,6 +97,21 @@ jobs:
 `dependabot-automerge` merges patch and minor updates. Major updates stay open for a human,
 because MSTest 3 to 4 and TypeScript 5 to 7 both broke the build.
 
+`node-build` installs, optionally lints, builds, and uploads a Node subproject's output as an
+artifact. A mod that embeds a bundled UI needs those files before the C# build runs, and more
+than one workflow in the same repo usually needs them.
+
+```yaml
+  dashboard:
+    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@v1
+    with:
+      working-directory: Dashboard
+      lint: true
+      artifact-name: dashboard-dist
+```
+
+`artifact-path` defaults to `dist`, relative to `working-directory`.
+
 ## Composite actions
 
 ### dotnet-sonar

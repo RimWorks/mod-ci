@@ -1,0 +1,61 @@
+name: node build
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directory holding package.json.
+        type: string
+        default: .
+      node-version:
+        description: Node major version to build with.
+        type: string
+        default: '22'
+      lint:
+        description: Run npm run lint before building.
+        type: boolean
+        default: false
+      artifact-name:
+        description: Name to upload the build output under.
+        type: string
+        required: true
+      artifact-path:
+        description: Build output, relative to working-directory.
+        type: string
+        default: dist
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Lint
+        if: inputs.lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.working-directory }}/${{ inputs.artifact-path }}
