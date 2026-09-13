@@ -121,9 +121,11 @@ action below is for mods; this is for the JS and shell repos, where a scanner ru
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
 
-SonarCloud turns its own Automatic Analysis off for good once any CI analysis arrives, so adding
-this is a one-way door. A project with no CI analysis and autoscan disabled reports nothing at
-all, which is how three of these repos sat twelve days stale without noticing.
+**Check Automatic Analysis first.** SonarCloud refuses a CI analysis outright when autoscan is
+enabled, with `You are running CI analysis while Automatic Analysis is enabled`. Read
+`sonar.autoscan.enabled` for the project before wiring this up, and only add it where autoscan is
+off. A project with autoscan off and no CI analysis reports nothing at all, which is how several
+of these repos sat twelve days stale with a green badge.
 
 `codeql` runs GitHub code scanning. The caller owns the triggers and has to grant
 `security-events: write`, because a called workflow cannot widen the caller's scopes.
