@@ -109,6 +109,22 @@ than one workflow in the same repo usually needs them.
 
 `artifact-path` defaults to `dist`, relative to `working-directory`.
 
+`sonar-scan` runs SonarCloud analysis on a repo with no .NET solution. The `dotnet-sonar`
+action below is for mods; this is for the JS and shell repos, where a scanner run needs no build.
+
+```yaml
+  scan:
+    uses: RimWorks/mod-ci/.github/workflows/sonar-scan.yml@<sha> # v1.5.2
+    with:
+      project-key: RimWorks_your-repo
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+```
+
+SonarCloud turns its own Automatic Analysis off for good once any CI analysis arrives, so adding
+this is a one-way door. A project with no CI analysis and autoscan disabled reports nothing at
+all, which is how three of these repos sat twelve days stale without noticing.
+
 `codeql` runs GitHub code scanning. The caller owns the triggers and has to grant
 `security-events: write`, because a called workflow cannot widen the caller's scopes.
 

@@ -1,0 +1,53 @@
+name: sonar scan
+
+on:
+  workflow_call:
+    inputs:
+      project-key:
+        description: SonarCloud project key, for example RimWorks_mod-ci.
+        type: string
+        required: true
+      organization:
+        description: SonarCloud organization key. Lowercase.
+        type: string
+        default: rimworks
+      exclusions:
+        description: Comma separated sonar.exclusions globs.
+        type: string
+        default: ''
+      coverage-report:
+        description: Path to an lcov report. Empty skips coverage.
+        type: string
+        default: ''
+      extra-args:
+        description: Extra -D arguments passed to the scanner.
+        type: string
+        default: ''
+    secrets:
+      SONAR_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >-
+            -Dsonar.projectKey=${{ inputs.project-key }}
+            -Dsonar.organization=${{ inputs.organization }}
+            ${{ inputs.exclusions != '' && format('-Dsonar.exclusions={0}', inputs.exclusions) || '' }}
+            ${{ inputs.coverage-report != '' && format('-Dsonar.javascript.lcov.reportPaths={0}', inputs.coverage-report) || '' }}
+            ${{ inputs.extra-args }}
