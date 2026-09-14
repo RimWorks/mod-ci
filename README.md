@@ -1,31 +1,53 @@
 # @rimworks/mod-ci
 
-Shared release plumbing for the RimWorks RimWorld mods. Four repos ran near-identical copies of
-these scripts. The copies drifted, so a fix landed in one and went stale in the other three.
+Shared release plumbing for the RimWorks RimWorld mods: publish stamps, Steam Workshop bumps,
+release-zip checks, Discord announcements, and the CI workflows that run them.
+
+Four repos used to keep near-identical copies of these scripts. The copies drifted, so a fix
+landed in one and went stale in the other three.
 
 Used by [RimLogging][rl], [Pickle][pk], [Quickstarts][qs] and [RimObs][ro].
 
 ## Install
 
 ```bash
-npm install --save-dev github:RimWorks/mod-ci#v1.5.0
+npm install --save-dev github:RimWorks/mod-ci#v1.7.0
 ```
 
-It is not on npm. Consumers install from the git tag, so the release never has to push a version
-commit back to a protected branch.
+This package is not on npm. Consumers install from a git tag, so a release never has to push a
+version commit back to a protected branch.
 
-`bumpWorkshop` also needs `semantic-release-steam`. It is an optional peer dependency, so install
-it only in repos that publish to the Steam Workshop.
+`bumpWorkshop` also needs `semantic-release-steam`. It is an optional peer dependency. Install it
+only in repos that publish to the Steam Workshop.
 
-## What it does
+## What's in here
 
-| Export | Purpose |
-|---|---|
-| `writeStamp` | Writes `About/PublishStamp.txt` with the versions the mod was built against |
-| `bumpWorkshop` | Stages the mod and pushes it to its Workshop item |
-| `missingFromReleaseZip` | Finds mod folders the GitHub release zip drops |
-| `verify-ship-list` | CLI wrapper around `missingFromReleaseZip` |
-| `buildReleasePayload` | Builds the Discord embed the `discord-release` action posts |
+| Kind | Name | Purpose |
+|---|---|---|
+| Module | `writeStamp` | Writes `About/PublishStamp.txt` with the versions the mod was built against |
+| Module | `bumpWorkshop` | Stages the mod and pushes it to its Workshop item |
+| Module | `missingFromReleaseZip` | Finds mod folders the GitHub release zip drops |
+| Module | `buildReleasePayload` | Builds the Discord embed for a published release |
+| CLI | `verify-ship-list` | Checks a repo's release zip ships every mod content directory |
+| CLI | `discord-release` | Posts the release embed to a webhook |
+| Workflow | `codeql` | GitHub code scanning |
+| Workflow | `dependabot-automerge` | Merges patch and minor dependency updates |
+| Workflow | `links` | Checks markdown links with lychee |
+| Workflow | `node-build` | Builds a Node subproject and uploads its output |
+| Workflow | `prose` | Runs Vale on documentation |
+| Workflow | `ship-list` | Runs `verify-ship-list` against the caller |
+| Workflow | `sonar` | SonarCloud scan for a .NET mod |
+| Workflow | `sonar-scan` | SonarCloud scan for a repo with no .NET solution |
+| Workflow | `test` | Installs Node and runs `npm test` |
+| Action | `discord-release` | Announces a release in Discord |
+| Action | `dotnet-sonar` | Build, analyzer gate, tests and coverage inside a Sonar scan |
+| Action | `steam-login` | Installs SteamCMD and restores a logged-in config |
+| Action | `steam-republish` | Pushes an already-built mod to its Workshop item |
+
+Pin workflows and actions to a commit SHA, with the tag in a trailing comment. The examples below
+use `<sha>` as a placeholder.
+
+## Modules
 
 ### writeStamp
 
@@ -51,11 +73,13 @@ import { bumpWorkshop } from '@rimworks/mod-ci';
 await bumpWorkshop({ workshopId: '3733484696', solution: 'RimWorks.RimLogging.sln' });
 ```
 
-Requires `STEAMCMD_PATH`, `STEAM_USERNAME` and `STEAM_CONFIG_VDF`. It sets no title, preview image
+It needs `STEAMCMD_PATH`, `STEAM_USERNAME` and `STEAM_CONFIG_VDF`. It sets no title, preview image
 or visibility, so the Workshop page keeps what it already has.
 
 Builds are deterministic. An unchanged source tree rebuilds byte for byte, and Steam moves the
 "Updated" date only when the content manifest changes. The stamp is what makes the date move.
+
+## CLI
 
 ### verify-ship-list
 
@@ -79,57 +103,26 @@ npx verify-ship-list .
 It exits `1` and names the folders when the `cp -r` step misses one that exists in the repo. A
 `release.config.mjs` with no `cp -r ... dist/` step exits `0`, because there is no zip to check.
 
+### discord-release
+
+Posts the release embed to a webhook. The `discord-release` action wraps it, so call the CLI
+directly only outside a release event.
+
+```bash
+DISCORD_WEBHOOK_URL=... MOD_NAME=Pickle WORKSHOP_ID=... npx discord-release
+```
+
+It reads `RELEASE_TAG`, `RELEASE_URL`, `RELEASE_NOTES`, `DISCORD_ROLE_IDS` and `EMBED_COLOR` from
+the environment too. It exits `1` when `DISCORD_WEBHOOK_URL` is missing.
+
 ## Reusable workflows
 
 Call these from a consumer repo instead of copying them.
 
-```yaml
-name: dependabot-automerge
-on: pull_request_target
+### codeql
 
-jobs:
-  automerge:
-    uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@<sha> # v1.5.0
-```
-
-`dependabot-automerge` merges patch and minor updates. Major updates stay open for a human,
-because MSTest 3 to 4 and TypeScript 5 to 7 both broke the build.
-
-`node-build` installs, optionally lints, builds, and uploads a Node subproject's output as an
-artifact. A mod that embeds a bundled UI needs those files before the C# build runs, and more
-than one workflow in the same repo usually needs them.
-
-```yaml
-  dashboard:
-    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@<sha> # v1.5.0
-    with:
-      working-directory: Dashboard
-      lint: true
-      artifact-name: dashboard-dist
-```
-
-`artifact-path` defaults to `dist`, relative to `working-directory`.
-
-`sonar-scan` runs SonarCloud analysis on a repo with no .NET solution. The `dotnet-sonar`
-action below is for mods; this is for the JS and shell repos, where a scanner run needs no build.
-
-```yaml
-  scan:
-    uses: RimWorks/mod-ci/.github/workflows/sonar-scan.yml@<sha> # v1.5.2
-    with:
-      project-key: RimWorks_your-repo
-    secrets:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-```
-
-**Check Automatic Analysis first.** SonarCloud refuses a CI analysis outright when autoscan is
-enabled, with `You are running CI analysis while Automatic Analysis is enabled`. Read
-`sonar.autoscan.enabled` for the project before wiring this up, and only add it where autoscan is
-off. A project with autoscan off and no CI analysis reports nothing at all, which is how several
-of these repos sat twelve days stale with a green badge.
-
-`codeql` runs GitHub code scanning. The caller owns the triggers and has to grant
-`security-events: write`, because a called workflow cannot widen the caller's scopes.
+Runs GitHub code scanning. The caller owns the triggers and has to grant `security-events: write`,
+because a called workflow cannot widen the caller's scopes.
 
 ```yaml
 name: codeql
@@ -143,7 +136,7 @@ on:
 
 jobs:
   analyze:
-    uses: RimWorks/mod-ci/.github/workflows/codeql.yml@<sha> # v1.5.0
+    uses: RimWorks/mod-ci/.github/workflows/codeql.yml@<sha> # v1.7.0
     permissions:
       contents: read
       security-events: write
@@ -153,6 +146,122 @@ jobs:
 
 `languages` is a JSON array and defaults to `["actions"]`, which every repo here can run.
 
+### dependabot-automerge
+
+Merges patch and minor updates. Major updates stay open for a human, because MSTest 3 to 4 and
+TypeScript 5 to 7 both broke the build.
+
+```yaml
+name: dependabot-automerge
+on: pull_request_target
+
+jobs:
+  automerge:
+    uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@<sha> # v1.7.0
+```
+
+### links
+
+Checks markdown links with lychee and fails on a dead one. Relative links break silently when a
+folder is renamed.
+
+```yaml
+  links:
+    uses: RimWorks/mod-ci/.github/workflows/links.yml@<sha> # v1.7.0
+    with:
+      args: --config lychee.toml --no-progress README.md docs/
+```
+
+`args` defaults to checking `README.md`, so a repo with a `lychee.toml` needs no inputs.
+
+### node-build
+
+Installs, optionally lints, builds, and uploads a Node subproject's output as an artifact. A mod
+that embeds a bundled UI needs those files before the C# build runs, and more than one workflow in
+the same repo usually needs them.
+
+```yaml
+  dashboard:
+    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@<sha> # v1.7.0
+    with:
+      working-directory: Dashboard
+      lint: true
+      artifact-name: dashboard-dist
+```
+
+`artifact-path` defaults to `dist`, relative to `working-directory`.
+
+### prose
+
+Runs Vale and reports findings on the pull request. Pass `extra-command` to run one more check
+after it, such as a docs catalogue check.
+
+```yaml
+  prose:
+    uses: RimWorks/mod-ci/.github/workflows/prose.yml@<sha> # v1.7.0
+```
+
+### ship-list
+
+Runs `verify-ship-list` against the caller's repo. It checks out mod-ci separately, so the caller
+needs no dependency on this package.
+
+```yaml
+  ship-list:
+    uses: RimWorks/mod-ci/.github/workflows/ship-list.yml@<sha> # v1.7.0
+```
+
+`ref` selects the mod-ci commit the checker runs from.
+
+### sonar
+
+Runs the `dotnet-sonar` action as a whole job, for a mod whose build needs no extra steps. It
+checks out with full history, can install Node or pnpm, and can run a `pre-scan-command` for a
+frontend build that produces lcov. Reach for the action instead when your job has to stage
+something first.
+
+```yaml
+  sonar:
+    uses: RimWorks/mod-ci/.github/workflows/sonar.yml@<sha> # v1.7.0
+    with:
+      solution: RimWorks.RimLogging.sln
+      project-key: RimWorks_rimworld-logging-framework
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+```
+
+The job skips itself for `dependabot[bot]`, because a dependabot pull request gets no repository
+secrets and the scan cannot authenticate with an empty token.
+
+### sonar-scan
+
+Runs SonarCloud analysis on a repo with no .NET solution. This is for the JS and shell repos,
+where a scanner run needs no build.
+
+```yaml
+  scan:
+    uses: RimWorks/mod-ci/.github/workflows/sonar-scan.yml@<sha> # v1.7.0
+    with:
+      project-key: RimWorks_your-repo
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+```
+
+**Check Automatic Analysis first.** SonarCloud refuses a CI analysis outright when autoscan is
+enabled, with `You are running CI analysis while Automatic Analysis is enabled`. Read
+`sonar.autoscan.enabled` for the project before wiring this up, and only add it where autoscan is
+off. A project with autoscan off and no CI analysis reports nothing at all, which is how several of
+these repos sat twelve days stale with a green badge.
+
+### test
+
+Installs Node 22 and runs `npm test`. It suits a plain Node repo with no build step.
+
+```yaml
+  test:
+    uses: RimWorks/mod-ci/.github/workflows/test.yml@<sha> # v1.7.0
+```
+
 ## Composite actions
 
 ### dotnet-sonar
@@ -160,8 +269,8 @@ jobs:
 Builds a mod, gates on analyzers, runs the tests and reports coverage to SonarCloud.
 
 It is an action rather than a reusable workflow because Pickle stages game assemblies from a
-container and RimObs builds a dashboard, both in the same job as the build. You cannot inject
-steps into a called workflow, but a composite action drops into the caller's job.
+container and RimObs builds a dashboard, both in the same job as the build. You cannot inject steps
+into a called workflow, but a composite action drops into the caller's job.
 
 The caller does its own checkout, because Sonar needs the full history to scope new code:
 
@@ -170,7 +279,7 @@ The caller does its own checkout, because Sonar needs the full history to scope 
         with:
           fetch-depth: 0
 
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@<sha> # v1.5.0
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@<sha> # v1.7.0
         with:
           solution: Quickstarts.slnx
           project-key: RimWorks_Rimworld-Quickstarts
@@ -183,8 +292,24 @@ targeting `net472` alone reports 0% and no error. Give the mod project `net472;n
 the test project at the net10.0 build. `net472` stays the only build the game loads.
 
 The analyzer gate runs `dotnet format analyzers --severity info`. MSTest and CA rules ship at info
-severity, which `dotnet build` never prints, so without the gate they reach a human as a
-SonarCloud issue days later. Pass `analyzer-severity: none` to skip it.
+severity, which `dotnet build` never prints, so without the gate they reach a human as a SonarCloud
+issue days later. Pass `analyzer-severity: none` to skip it.
+
+### steam-login
+
+Installs SteamCMD, restores a logged-in `config.vdf`, and exports `STEAMCMD_PATH` and
+`STEAM_CONFIG_VDF` to the job. `steam-republish` calls it, so use it directly only when a job runs
+its own Steam step.
+
+```yaml
+      - uses: RimWorks/mod-ci/.github/actions/steam-login@<sha> # v1.7.0
+        with:
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+```
+
+Pass `steam-username` to log in up front. A stale config then fails in this step instead of partway
+through a publish.
 
 ### steam-republish
 
@@ -192,7 +317,7 @@ Pushes an already-built mod to its Steam Workshop item. Used by `weekly-verify`,
 verifies against the current RimWorld and republishes with no code changes.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/steam-republish@<sha> # v1.5.0
+      - uses: RimWorks/mod-ci/.github/actions/steam-republish@<sha> # v1.7.0
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
@@ -200,14 +325,14 @@ verifies against the current RimWorld and republishes with no code changes.
           verified-tests: ${{ env.TESTS_PASSED }}
 ```
 
-The repo's `scripts/workshop-bump.mjs` reads `WORKSHOP_ID` and falls back to the id baked into
-the script, so `workshop-id` is only needed to point a run at a different item.
+The repo's `scripts/workshop-bump.mjs` reads `WORKSHOP_ID` and falls back to the id baked into the
+script, so `workshop-id` is only needed to point a run at a different item.
 
 ### discord-release
 
 Announces a published GitHub release in the Discord releases channel and pings that mod's
-notification role. Give it its own workflow, because it runs on the release event rather than
-on a push.
+notification role. Give it its own workflow, because it runs on the release event rather than on a
+push.
 
 ```yaml
 name: announce
@@ -227,14 +352,15 @@ jobs:
           workshop-id: ${{ vars.WORKSHOP_ID }}
 ```
 
-The embed links the Workshop page and the release, and its body is the release notes. Notes
-longer than the Discord embed limit are cut on a line break and end with a link to the full
-changelog. Leave `workshop-id` empty for a mod that is not on the Workshop, and leave `role-ids`
-empty to announce without a ping. Both list inputs take comma separated values, because one Cosmere
-release ships Core, Scadrial and Roshar together: pass `workshop-id` as `Core=123, Scadrial=456` to
-label each link, and `role-ids` as a list when a release covers several notification roles.
-`allowed_mentions` lists only those roles, so a changelog that says `@everyone` cannot ping the
-server.
+The embed links the Workshop page and the release, and its body is the release notes. Notes longer
+than the Discord embed limit are cut on a line break and end with a link to the full changelog.
+Leave `workshop-id` empty for a mod that is not on the Workshop, and leave `role-ids` empty to
+announce without a ping.
+
+Both list inputs take comma separated values, because one Cosmere release ships Core, Scadrial and
+Roshar together. Pass `workshop-id` as `Core=123, Scadrial=456` to label each link, and `role-ids`
+as a list when a release covers several notification roles. `allowed_mentions` lists only those
+roles, so a changelog that says `@everyone` cannot ping the server.
 
 ## Development
 
