@@ -344,7 +344,7 @@ jobs:
   announce:
     runs-on: ubuntu-latest
     steps:
-      - uses: RimWorks/mod-ci/.github/actions/discord-release@<sha> # v1.7.0
+      - uses: RimWorks/mod-ci/.github/actions/discord-release@ce9b54f421d96c7503cf6ff896916e4419ed084d # v1.7.0
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           mod-name: Pickle
