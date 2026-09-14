@@ -346,7 +346,7 @@ for the event.
       - name: Run semantic-release
         run: ./node_modules/.bin/semantic-release
 
-      - uses: RimWorks/mod-ci/.github/actions/discord-release@<sha> # v1.8.0
+      - uses: RimWorks/mod-ci/.github/actions/discord-release@3fc79fa70496f2d785d8b0ba485ba6f213f9c264 # v1.8.0
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           mod-name: Pickle
