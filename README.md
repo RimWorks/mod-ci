@@ -25,6 +25,7 @@ it only in repos that publish to the Steam Workshop.
 | `bumpWorkshop` | Stages the mod and pushes it to its Workshop item |
 | `missingFromReleaseZip` | Finds mod folders the GitHub release zip drops |
 | `verify-ship-list` | CLI wrapper around `missingFromReleaseZip` |
+| `buildReleasePayload` | Builds the Discord embed the `discord-release` action posts |
 
 ### writeStamp
 
@@ -201,6 +202,39 @@ verifies against the current RimWorld and republishes with no code changes.
 
 The repo's `scripts/workshop-bump.mjs` reads `WORKSHOP_ID` and falls back to the id baked into
 the script, so `workshop-id` is only needed to point a run at a different item.
+
+### discord-release
+
+Announces a published GitHub release in the Discord releases channel and pings that mod's
+notification role. Give it its own workflow, because it runs on the release event rather than
+on a push.
+
+```yaml
+name: announce
+on:
+  release:
+    types: [published]
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: RimWorks/mod-ci/.github/actions/discord-release@<sha> # v1.7.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          mod-name: Pickle
+          role-ids: ${{ vars.DISCORD_ROLE_IDS }}
+          workshop-id: ${{ vars.WORKSHOP_ID }}
+```
+
+The embed links the Workshop page and the release, and its body is the release notes. Notes
+longer than the Discord embed limit are cut on a line break and end with a link to the full
+changelog. Leave `workshop-id` empty for a mod that is not on the Workshop, and leave `role-ids`
+empty to announce without a ping. Both list inputs take comma separated values, because one Cosmere
+release ships Core, Scadrial and Roshar together: pass `workshop-id` as `Core=123, Scadrial=456` to
+label each link, and `role-ids` as a list when a release covers several notification roles.
+`allowed_mentions` lists only those roles, so a changelog that says `@everyone` cannot ping the
+server.
 
 ## Development
 

@@ -1,0 +1,44 @@
+name: discord release
+description: Announce a published GitHub release in Discord, pinging the mod's notification role.
+
+inputs:
+  webhook-url:
+    description: Discord webhook URL for the releases channel
+    required: true
+  mod-name:
+    description: Display name of the mod, e.g. Pickle
+    required: true
+  role-ids:
+    description: Comma separated Discord roles to ping. Leave empty to announce without a ping
+    default: ''
+  workshop-id:
+    description: Steam Workshop item id. Leave empty for a mod that is not on the Workshop
+    default: ''
+  embed-color:
+    description: Embed colour as a hex string without the leading hash
+    default: '5865F2'
+  release-tag:
+    description: Overrides the tag, for calling this outside a release event
+    default: ${{ github.event.release.tag_name }}
+  release-url:
+    description: Overrides the release URL, for calling this outside a release event
+    default: ${{ github.event.release.html_url }}
+  release-notes:
+    description: Overrides the changelog body, for calling this outside a release event
+    default: ${{ github.event.release.body }}
+
+runs:
+  using: composite
+  steps:
+    - name: Post the release
+      shell: bash
+      env:
+        DISCORD_WEBHOOK_URL: ${{ inputs.webhook-url }}
+        DISCORD_ROLE_IDS: ${{ inputs.role-ids }}
+        MOD_NAME: ${{ inputs.mod-name }}
+        WORKSHOP_ID: ${{ inputs.workshop-id }}
+        EMBED_COLOR: ${{ inputs.embed-color }}
+        RELEASE_TAG: ${{ inputs.release-tag }}
+        RELEASE_URL: ${{ inputs.release-url }}
+        RELEASE_NOTES: ${{ inputs.release-notes }}
+      run: node "${{ github.action_path }}/../../../bin/discord-release.mjs"

@@ -9,14 +9,16 @@
     "./lib/*": "./lib/*"
   },
   "bin": {
-    "verify-ship-list": "./bin/verify-ship-list.mjs"
+    "verify-ship-list": "./bin/verify-ship-list.mjs",
+    "discord-release": "./bin/discord-release.mjs"
   },
   "files": [
-    "index.mjs",
-    "lib/",
-    "bin/",
+    ".github/actions/",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "bin/",
+    "index.mjs",
+    "lib/"
   ],
   "scripts": {
     "test": "node --test tests/*.test.mjs"
