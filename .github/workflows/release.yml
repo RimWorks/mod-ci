@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install semantic-release
-        run: npm install --no-save --ignore-scripts semantic-release@25.0.9
+        run: npm install --no-save --ignore-scripts semantic-release@25.0.9 semantic-release-github-actions-tags@2.0.2
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
