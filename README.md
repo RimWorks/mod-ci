@@ -359,6 +359,9 @@ for the event.
 releases, so an unmoved tag means the step posts nothing and exits clean. The checkout needs
 `fetch-depth: 0`, or `git describe` sees no tags.
 
+The notes come from the GitHub release, so the repo has to publish one. A repo that only tags fails
+here on purpose, with a message telling you to add `@semantic-release/github`.
+
 The embed links the Workshop page and the release, and its body is the release notes. Notes longer
 than the Discord embed limit are cut on a line break and end with a link to the full changelog.
 Leave `workshop-id` empty for a mod that is not on the Workshop, and leave `role-ids` empty to

@@ -36,7 +36,7 @@ inputs:
 runs:
   using: composite
   steps:
-    # semantic-release only tags when it releases, so an unmoved tag means there is nothing to say.
+    # semantic-release only tags when it releases, so an unmoved tag means nothing shipped
     - name: Find the release
       id: find
       shell: bash
@@ -64,7 +64,10 @@ runs:
         url="$INPUT_URL"
         notes="$INPUT_NOTES"
         if [ -z "$url" ] || [ -z "$notes" ]; then
-          gh release view "$tag" --json url,body > /tmp/discord-release.json
+          if ! gh release view "$tag" --json url,body > /tmp/discord-release.json; then
+            echo "::error::No GitHub release for $tag. Add @semantic-release/github to this repo's release config."
+            exit 1
+          fi
           [ -n "$url" ] || url="$(jq -r '.url' /tmp/discord-release.json)"
           [ -n "$notes" ] || notes="$(jq -r '.body' /tmp/discord-release.json)"
         fi
