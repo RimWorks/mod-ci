@@ -113,7 +113,8 @@ DISCORD_WEBHOOK_URL=... MOD_NAME=Pickle WORKSHOP_ID=... npx discord-release
 ```
 
 It reads `RELEASE_TAG`, `RELEASE_URL`, `RELEASE_NOTES`, `DISCORD_ROLE_IDS` and `EMBED_COLOR` from
-the environment too. It exits `1` when `DISCORD_WEBHOOK_URL` is missing.
+the environment too. Set `RELEASE_NOTES_FILE` instead of `RELEASE_NOTES` when the changelog is long
+or has backticks in it. It exits `1` when `DISCORD_WEBHOOK_URL` is missing.
 
 ## Reusable workflows
 
@@ -330,27 +331,33 @@ script, so `workshop-id` is only needed to point a run at a different item.
 
 ### discord-release
 
-Announces a published GitHub release in the Discord releases channel and pings that mod's
-notification role. Give it its own workflow, because it runs on the release event rather than on a
-push.
+Announces the release semantic-release just cut in the Discord releases channel, and pings that
+mod's notification role. Add it to the release job, after semantic-release runs.
+
+Releases cut with `secrets.GITHUB_TOKEN` do not fire the `release` event, because GitHub refuses to
+trigger a workflow from its own token. That is why this runs in the same job instead of listening
+for the event.
 
 ```yaml
-name: announce
-on:
-  release:
-    types: [published]
+      - name: Record the tag before releasing
+        id: before
+        run: echo "tag=$(git describe --tags --abbrev=0 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
-jobs:
-  announce:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: RimWorks/mod-ci/.github/actions/discord-release@ce9b54f421d96c7503cf6ff896916e4419ed084d # v1.7.0
+      - name: Run semantic-release
+        run: ./node_modules/.bin/semantic-release
+
+      - uses: RimWorks/mod-ci/.github/actions/discord-release@<sha> # v1.8.0
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           mod-name: Pickle
           role-ids: ${{ vars.DISCORD_ROLE_IDS }}
-          workshop-id: ${{ vars.WORKSHOP_ID }}
+          workshop-id: '3791648678'
+          previous-tag: ${{ steps.before.outputs.tag }}
 ```
+
+`previous-tag` is how it knows whether anything shipped. semantic-release only tags when it
+releases, so an unmoved tag means the step posts nothing and exits clean. The checkout needs
+`fetch-depth: 0`, or `git describe` sees no tags.
 
 The embed links the Workshop page and the release, and its body is the release notes. Notes longer
 than the Discord embed limit are cut on a line break and end with a link to the full changelog.

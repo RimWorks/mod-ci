@@ -1,5 +1,5 @@
 name: discord release
-description: Announce a published GitHub release in Discord, pinging the mod's notification role.
+description: Announce the release semantic-release just cut in Discord, pinging the mod's notification role.
 
 inputs:
   webhook-url:
@@ -12,25 +12,70 @@ inputs:
     description: Comma separated Discord roles to ping. Leave empty to announce without a ping
     default: ''
   workshop-id:
-    description: Steam Workshop item id. Leave empty for a mod that is not on the Workshop
+    description: Workshop item id, or `Label=id` pairs when one release ships several mods
     default: ''
   embed-color:
     description: Embed colour as a hex string without the leading hash
     default: '5865F2'
+  previous-tag:
+    description: Newest tag before semantic-release ran. Announces nothing when the tag has not moved
+    default: ''
+  github-token:
+    description: Token used to read the release notes
+    default: ${{ github.token }}
   release-tag:
-    description: Overrides the tag, for calling this outside a release event
+    description: Overrides the tag instead of reading the newest one
     default: ${{ github.event.release.tag_name }}
   release-url:
-    description: Overrides the release URL, for calling this outside a release event
+    description: Overrides the release URL instead of reading it
     default: ${{ github.event.release.html_url }}
   release-notes:
-    description: Overrides the changelog body, for calling this outside a release event
+    description: Overrides the changelog body instead of reading it
     default: ${{ github.event.release.body }}
 
 runs:
   using: composite
   steps:
+    # semantic-release only tags when it releases, so an unmoved tag means there is nothing to say.
+    - name: Find the release
+      id: find
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_TAG: ${{ inputs.release-tag }}
+        INPUT_URL: ${{ inputs.release-url }}
+        INPUT_NOTES: ${{ inputs.release-notes }}
+        PREVIOUS_TAG: ${{ inputs.previous-tag }}
+      run: |
+        set -euo pipefail
+
+        tag="$INPUT_TAG"
+        if [ -z "$tag" ]; then
+          git fetch --tags --force --quiet
+          tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+        fi
+
+        if [ -z "$tag" ] || [ "$tag" = "$PREVIOUS_TAG" ]; then
+          echo "Tag is still ${PREVIOUS_TAG:-unset}, so nothing was released."
+          echo 'skip=true' >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        url="$INPUT_URL"
+        notes="$INPUT_NOTES"
+        if [ -z "$url" ] || [ -z "$notes" ]; then
+          gh release view "$tag" --json url,body > /tmp/discord-release.json
+          [ -n "$url" ] || url="$(jq -r '.url' /tmp/discord-release.json)"
+          [ -n "$notes" ] || notes="$(jq -r '.body' /tmp/discord-release.json)"
+        fi
+
+        printf '%s' "$notes" > /tmp/discord-release-notes.md
+        echo "skip=false" >> "$GITHUB_OUTPUT"
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        echo "url=$url" >> "$GITHUB_OUTPUT"
+
     - name: Post the release
+      if: steps.find.outputs.skip != 'true'
       shell: bash
       env:
         DISCORD_WEBHOOK_URL: ${{ inputs.webhook-url }}
@@ -38,7 +83,7 @@ runs:
         MOD_NAME: ${{ inputs.mod-name }}
         WORKSHOP_ID: ${{ inputs.workshop-id }}
         EMBED_COLOR: ${{ inputs.embed-color }}
-        RELEASE_TAG: ${{ inputs.release-tag }}
-        RELEASE_URL: ${{ inputs.release-url }}
-        RELEASE_NOTES: ${{ inputs.release-notes }}
+        RELEASE_TAG: ${{ steps.find.outputs.tag }}
+        RELEASE_URL: ${{ steps.find.outputs.url }}
+        RELEASE_NOTES_FILE: /tmp/discord-release-notes.md
       run: node "${{ github.action_path }}/../../../bin/discord-release.mjs"
