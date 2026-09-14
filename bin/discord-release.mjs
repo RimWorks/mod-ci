@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 
 import { buildReleasePayload, postRelease } from '../lib/discord-release.mjs';
 
-// A changelog is multi-line and full of backticks, so it travels as a file rather than as an env var.
 const notesFile = process.env.RELEASE_NOTES_FILE;
 
 const webhookUrl = process.env.DISCORD_WEBHOOK_URL;

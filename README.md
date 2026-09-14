@@ -26,8 +26,10 @@ only in repos that publish to the Steam Workshop.
 |---|---|---|
 | Module | `writeStamp` | Writes `About/PublishStamp.txt` with the versions the mod was built against |
 | Module | `bumpWorkshop` | Stages the mod and pushes it to its Workshop item |
+| Module | `packageMod` | Stages a mod the way Steam does and zips it |
 | Module | `missingFromReleaseZip` | Finds mod folders the GitHub release zip drops |
 | Module | `buildReleasePayload` | Builds the Discord embed for a published release |
+| CLI | `package-mod` | Builds the release zip from `.steamignore` |
 | CLI | `verify-ship-list` | Checks a repo's release zip ships every mod content directory |
 | CLI | `discord-release` | Posts the release embed to a webhook |
 | Workflow | `codeql` | GitHub code scanning |
@@ -63,6 +65,17 @@ await writeStamp({ solution: 'RimWorks.RimLogging.sln' });
 The stamp reads `VERIFIED_COMMIT` and `VERIFIED_TESTS` from the environment when they are set.
 Omit `solution` and the stamp still writes, but without the package table.
 
+### packageMod
+
+```js
+import { packageMod } from '@rimworks/mod-ci';
+
+const { zipPath, entries } = await packageMod({ name: 'Pickle', version: '1.2.3' });
+```
+
+Returns the zip path and the top-level names that went in. Takes `modPath` for a repo that ships
+several mods, and `outDir` when `dist` is taken.
+
 ### bumpWorkshop
 
 Pushes the mod to Steam with a fresh stamp. Weekly verification runs call it.
@@ -80,6 +93,24 @@ Builds are deterministic. An unchanged source tree rebuilds byte for byte, and S
 "Updated" date only when the content manifest changes. The stamp is what makes the date move.
 
 ## CLI
+
+### package-mod
+
+Builds the GitHub release zip. Run it after the build, in `prepareCmd`:
+
+```bash
+npx package-mod Pickle ${nextRelease.version}
+```
+
+It writes `dist/Pickle-1.2.3.zip`, containing a `Pickle/` folder a player drops straight into
+`RimWorld/Mods`. Point the `@semantic-release/github` asset at `dist/Pickle-*.zip`.
+
+The file list comes from `.steamignore`, the same list SteamCMD uploads through. That is the point:
+there is no second allowlist to drift from the first, which is the failure `verify-ship-list` exists
+to catch. `README.md` is the one exception, put back because Steam drops it in favour of the
+Workshop description and a downloaded zip still wants it.
+
+It exits `1` when the directory has no `.steamignore` or no `About/About.xml`.
 
 ### verify-ship-list
 

@@ -9,8 +9,9 @@
     "./lib/*": "./lib/*"
   },
   "bin": {
-    "verify-ship-list": "./bin/verify-ship-list.mjs",
-    "discord-release": "./bin/discord-release.mjs"
+    "discord-release": "./bin/discord-release.mjs",
+    "package-mod": "./bin/package-mod.mjs",
+    "verify-ship-list": "./bin/verify-ship-list.mjs"
   },
   "files": [
     ".github/actions/",
