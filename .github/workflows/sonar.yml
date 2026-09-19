@@ -86,6 +86,7 @@ jobs:
           # A caller on pull_request_target has the token but is checked out at the base
           # branch. Point at the PR head so the fork's code is what gets scanned.
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
+          allow-unsafe-pr-checkout: ${{ github.event_name == 'pull_request_target' }}
 
       - name: Setup pnpm
         if: inputs.package-manager == 'pnpm'
