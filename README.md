@@ -266,6 +266,24 @@ something first.
 The job skips itself for `dependabot[bot]`, because a dependabot pull request gets no repository
 secrets and the scan cannot authenticate with an empty token.
 
+**Pull requests from forks.** A `pull_request` run from a fork gets no secrets either, so the
+scan dies on an empty token. Trigger the caller on `pull_request_target` instead: the job then
+runs with the base repo's secrets, and both `sonar` and `sonar-scan` check out the PR head and
+pass the PR number, branch and base to the scanner themselves. Nothing else changes in the
+caller. Be aware of what that means: the fork's code is built with `SONAR_TOKEN` in the
+environment. Key the caller's `concurrency` group on `github.event.pull_request.number`, not
+`github.ref`, which is the base branch under `pull_request_target`.
+
+```yaml
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: sonar-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+```
+
 ### sonar-scan
 
 Runs SonarCloud analysis on a repo with no .NET solution. This is for the JS and shell repos,
