@@ -35,6 +35,9 @@ inputs:
   test-filter:
     description: dotnet test --filter, to keep timing-sensitive tests out of an instrumented run
     default: ''
+  test-command:
+    description: "Bash that runs the tests instead of dotnet test, for a suite dotnet test cannot host (net472 under mono). No coverage is collected then."
+    default: ''
 
 runs:
   using: composite
@@ -116,7 +119,13 @@ runs:
           --severity "${{ inputs.analyzer-severity }}" --verify-no-changes --no-restore
 
     # coverlet only records hits for a modern assembly, hence the net10.0 build
+    - name: Test
+      if: inputs.test-command != ''
+      shell: bash
+      run: ${{ inputs.test-command }}
+
     - name: Test and collect coverage
+      if: inputs.test-command == ''
       shell: bash
       env:
         TEST_FILTER: ${{ inputs.test-filter }}
