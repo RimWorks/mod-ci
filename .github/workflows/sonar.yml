@@ -83,6 +83,9 @@ jobs:
         with:
           # Sonar needs full history to blame lines and scope new code.
           fetch-depth: 0
+          # A caller on pull_request_target has the token but is checked out at the base
+          # branch. Point at the PR head so the fork's code is what gets scanned.
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
 
       - name: Setup pnpm
         if: inputs.package-manager == 'pnpm'
@@ -115,6 +118,10 @@ jobs:
           configuration: ${{ inputs.configuration }}
           exclusions: ${{ inputs.exclusions }}
           coverage-exclusions: ${{ inputs.coverage-exclusions }}
-          extra-begin-args: ${{ inputs.extra-begin-args }}
+          # Under pull_request_target the scanner sees the base branch and would file the PR's
+          # code as an analysis of main, so the PR coordinates go in by hand.
+          extra-begin-args: >-
+            ${{ inputs.extra-begin-args }}
+            ${{ github.event_name == 'pull_request_target' && format('/d:sonar.pullrequest.key={0} /d:sonar.pullrequest.branch={1} /d:sonar.pullrequest.base={2}', github.event.pull_request.number, github.event.pull_request.head.ref, github.event.pull_request.base.ref) || '' }}
           analyzer-severity: ${{ inputs.analyzer-severity }}
           test-filter: ${{ inputs.test-filter }}
