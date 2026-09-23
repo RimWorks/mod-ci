@@ -57,7 +57,7 @@ jobs:
     steps:
       - name: Build the RimWorld game image
         id: image
-        uses: RimWorks/steam-game-image-action@v2
+        uses: RimWorks/steam-game-image-action@v3
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
