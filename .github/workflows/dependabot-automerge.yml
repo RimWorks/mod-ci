@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Read the update metadata
         id: meta
-        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        uses: dependabot/fetch-metadata@v3
 
       # majors stay open for a human: MSTest 3 to 4 and TypeScript 5 to 7 both broke the build
       - name: Enable auto-merge for patch and minor

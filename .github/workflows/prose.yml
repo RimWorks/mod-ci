@@ -17,10 +17,10 @@ jobs:
   prose:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
 
       - name: Vale
-        uses: errata-ai/vale-action@518a9136acc6e6668ce7c00d367051e0941e87ff # reviewdog
+        uses: errata-ai/vale-action@v3
         with:
           reporter: github-pr-check
           fail_on_error: true

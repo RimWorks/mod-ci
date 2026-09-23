@@ -1,0 +1,69 @@
+name: game image
+
+# Builds a RimWorld image from Steam and hands its ref to the caller. Pickle and Quickstarts
+# each carried a verbatim copy of this before it moved here.
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: Steam branch to download, for example version-1.6.4871
+        type: string
+        required: true
+      app-id:
+        description: Steam app id. RimWorld is 294100.
+        type: string
+        default: '294100'
+      image:
+        description: Image to push. Defaults to the caller's owner namespace.
+        type: string
+        default: ''
+      include-paths:
+        description: >
+          Limit the image to these paths. Managed alone is enough to compile against;
+          leave it empty for an image the game can actually run from.
+        type: string
+        default: ''
+      force:
+        description: Rebuild even when the Steam buildid has not moved.
+        type: boolean
+        default: false
+    secrets:
+      STEAM_USERNAME:
+        required: false
+      STEAM_CONFIG_VDF_B64:
+        required: false
+    outputs:
+      image-ref:
+        description: Image ref a build job should pull.
+        value: ${{ jobs.image.outputs.image-ref }}
+      skipped:
+        description: True when the Steam buildid had not moved and nothing was rebuilt.
+        value: ${{ jobs.image.outputs.skipped }}
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: rimworld image
+    runs-on: ubuntu-latest
+    outputs:
+      image-ref: ${{ steps.image.outputs.image-ref }}
+      skipped: ${{ steps.image.outputs.skipped }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Build the RimWorld game image
+        id: image
+        uses: RimWorks/steam-game-image-action@v2
+        with:
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+          app-id: ${{ inputs.app-id }}
+          branch: ${{ inputs.branch }}
+          image: ${{ inputs.image != '' && inputs.image || format('ghcr.io/{0}/rimworld-game', github.repository_owner) }}
+          include-paths: ${{ inputs.include-paths }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}

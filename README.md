@@ -34,6 +34,8 @@ only in repos that publish to the Steam Workshop.
 | CLI | `discord-release` | Posts the release embed to a webhook |
 | Workflow | `codeql` | GitHub code scanning |
 | Workflow | `dependabot-automerge` | Merges patch and minor dependency updates |
+| Workflow | `dotnet-build` | Builds, tests, publishes results and checks formatting |
+| Workflow | `game-image` | Builds a RimWorld image from Steam and returns its ref |
 | Workflow | `links` | Checks markdown links with lychee |
 | Workflow | `node-build` | Builds a Node subproject and uploads its output |
 | Workflow | `prose` | Runs Vale on documentation |
@@ -46,9 +48,14 @@ only in repos that publish to the Steam Workshop.
 | Action | `steam-login` | Installs SteamCMD and restores a logged-in config |
 | Action | `steam-republish` | Pushes an already-built mod to its Workshop item |
 
-Pin workflows and actions to the minor tag, `v1.10`. `semantic-release-github-actions-tags` moves
-`v1` and `v1.10` to each new release, so a consumer picks up fixes without a bump and never picks
-up a breaking change.
+Pin workflows and actions to the major tag, `v1`. `semantic-release-github-actions-tags` moves
+`v1` and the minor tag to each new release. A consumer picks up fixes without a bump. It never
+picks up a breaking change.
+
+Actions inside these workflows are pinned to their major tag too, not to a commit SHA. A SHA
+never picks up a security fix on its own, and every consumer then waits on a release here.
+Because of that, `codeql` excludes the `actions/unpinned-tag` query. Without the exclusion it
+reports every workflow in every consumer.
 
 ## Modules
 

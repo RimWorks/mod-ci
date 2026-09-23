@@ -1,0 +1,120 @@
+name: dotnet build
+
+# Build, test, publish the results and check formatting. Every mod repo had its own near
+# identical copy of this job, which is the drift this package exists to stop.
+
+on:
+  workflow_call:
+    inputs:
+      solution:
+        description: Solution or project to build, for example Quickstarts.slnx
+        type: string
+        required: true
+      dotnet-version:
+        description: Passed to setup-dotnet. Newline separated for more than one SDK.
+        type: string
+        default: '10.0.x'
+      test:
+        description: Run the test suite. Turn it off for a repo with no test project.
+        type: boolean
+        default: true
+      test-solution:
+        description: Project to test, when it is not the one that was built.
+        type: string
+        default: ''
+      format:
+        description: Run dotnet format --verify-no-changes.
+        type: boolean
+        default: true
+      results-name:
+        description: Check-run name the test results are published under.
+        type: string
+        default: unit tests
+      artifact-name:
+        description: Upload the build output under this name. Empty uploads nothing.
+        type: string
+        default: ''
+      artifact-paths:
+        description: Newline separated paths to upload when artifact-name is set.
+        type: string
+        default: ''
+      game-image:
+        description: >
+          Game image to stage real RimWorld assemblies from, as produced by game-image.yml.
+          Empty builds against the Krafs reference assemblies alone.
+        type: string
+        default: ''
+      game-managed-property:
+        description: MSBuild property that receives the staged Managed directory.
+        type: string
+        default: GameManagedDir
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      # A mod that patches sealed or private members cannot prove it compiles against the
+      # reference assemblies alone, so it builds twice when a game image is supplied.
+      - name: Stage game assemblies
+        if: inputs.game-image != ''
+        env:
+          GAME_IMAGE: ${{ inputs.game-image }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker pull -q "$GAME_IMAGE"
+          cid="$(docker create "$GAME_IMAGE")"
+          mkdir -p "$RUNNER_TEMP/game"
+          docker cp "$cid:/game/RimWorldLinux_Data" "$RUNNER_TEMP/game/RimWorldLinux_Data"
+          docker rm -f "$cid"
+
+      - name: Build against the real game assemblies
+        if: inputs.game-image != ''
+        run: >
+          dotnet build ${{ inputs.solution }} -c Release --nologo
+          "-p:${{ inputs.game-managed-property }}=$RUNNER_TEMP/game/RimWorldLinux_Data/Managed"
+
+      - name: Build
+        run: dotnet build ${{ inputs.solution }} -c Release --nologo
+
+      - name: Upload build output
+        if: inputs.artifact-name != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact-name }}
+          if-no-files-found: error
+          path: ${{ inputs.artifact-paths }}
+
+      - name: Run tests
+        if: inputs.test
+        run: >
+          dotnet test ${{ inputs.test-solution != '' && inputs.test-solution || inputs.solution }}
+          -c Release --nologo
+          --logger "trx;LogFileName=tests.trx" --results-directory "$RUNNER_TEMP/test-results"
+
+      - name: Publish the test results
+        if: always() && inputs.test
+        uses: dorny/test-reporter@v3
+        with:
+          name: ${{ inputs.results-name }}
+          path: ${{ runner.temp }}/test-results/*.trx
+          reporter: dotnet-trx
+          fail-on-error: false
+
+      - name: dotnet format
+        if: inputs.format
+        run: dotnet format ${{ inputs.solution }} --verify-no-changes

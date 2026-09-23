@@ -25,7 +25,7 @@ runs:
   using: composite
   steps:
     - name: Set up SteamCMD
-      uses: buildalon/setup-steamcmd@2a16e8f482192d9a5710a17f0119890ceb1f48a1 # v1
+      uses: buildalon/setup-steamcmd@v1
 
     - name: Restore Steam config
       shell: bash
