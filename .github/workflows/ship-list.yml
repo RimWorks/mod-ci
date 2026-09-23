@@ -6,7 +6,7 @@ on:
       ref:
         description: mod-ci tag to run the checker from
         type: string
-        default: v1.10
+        default: v1
 
 jobs:
   verify:

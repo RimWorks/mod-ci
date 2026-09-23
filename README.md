@@ -11,7 +11,7 @@ Used by [RimLogging][rl], [Pickle][pk], [Quickstarts][qs] and [RimObs][ro].
 ## Install
 
 ```bash
-npm install --save-dev github:RimWorks/mod-ci#v1.10
+npm install --save-dev github:RimWorks/mod-ci#v1
 ```
 
 This package is not on npm. Consumers install from a git tag, so a release never has to push a
@@ -176,7 +176,7 @@ on:
 
 jobs:
   analyze:
-    uses: RimWorks/mod-ci/.github/workflows/codeql.yml@v1.10
+    uses: RimWorks/mod-ci/.github/workflows/codeql.yml@v1
     permissions:
       contents: read
       security-events: write
@@ -197,7 +197,7 @@ on: pull_request_target
 
 jobs:
   automerge:
-    uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@v1.10
+    uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@v1
 ```
 
 ### links
@@ -207,7 +207,7 @@ folder is renamed.
 
 ```yaml
   links:
-    uses: RimWorks/mod-ci/.github/workflows/links.yml@v1.10
+    uses: RimWorks/mod-ci/.github/workflows/links.yml@v1
     with:
       args: --config lychee.toml --no-progress README.md docs/
 ```
@@ -222,7 +222,7 @@ the same repo usually needs them.
 
 ```yaml
   dashboard:
-    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@v1.10
+    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@v1
     with:
       working-directory: Dashboard
       lint: true
@@ -238,7 +238,7 @@ after it, such as a docs catalogue check.
 
 ```yaml
   prose:
-    uses: RimWorks/mod-ci/.github/workflows/prose.yml@v1.10
+    uses: RimWorks/mod-ci/.github/workflows/prose.yml@v1
 ```
 
 ### ship-list
@@ -248,7 +248,7 @@ needs no dependency on this package.
 
 ```yaml
   ship-list:
-    uses: RimWorks/mod-ci/.github/workflows/ship-list.yml@v1.10
+    uses: RimWorks/mod-ci/.github/workflows/ship-list.yml@v1
 ```
 
 `ref` selects the mod-ci commit the checker runs from.
@@ -262,7 +262,7 @@ something first.
 
 ```yaml
   sonar:
-    uses: RimWorks/mod-ci/.github/workflows/sonar.yml@v1.10
+    uses: RimWorks/mod-ci/.github/workflows/sonar.yml@v1
     with:
       solution: RimWorks.RimLogging.sln
       project-key: RimWorks_rimworld-logging-framework
@@ -298,7 +298,7 @@ where a scanner run needs no build.
 
 ```yaml
   scan:
-    uses: RimWorks/mod-ci/.github/workflows/sonar-scan.yml@v1.10
+    uses: RimWorks/mod-ci/.github/workflows/sonar-scan.yml@v1
     with:
       project-key: RimWorks_your-repo
     secrets:
@@ -317,7 +317,7 @@ Installs Node 22 and runs `npm test`. It suits a plain Node repo with no build s
 
 ```yaml
   test:
-    uses: RimWorks/mod-ci/.github/workflows/test.yml@v1.10
+    uses: RimWorks/mod-ci/.github/workflows/test.yml@v1
 ```
 
 ## Composite actions
@@ -337,7 +337,7 @@ The caller does its own checkout, because Sonar needs the full history to scope 
         with:
           fetch-depth: 0
 
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v1.10
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v1
         with:
           solution: Quickstarts.slnx
           project-key: RimWorks_Rimworld-Quickstarts
@@ -360,7 +360,7 @@ Installs SteamCMD, restores a logged-in `config.vdf`, and exports `STEAMCMD_PATH
 its own Steam step.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/steam-login@v1.10
+      - uses: RimWorks/mod-ci/.github/actions/steam-login@v1
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
@@ -375,7 +375,7 @@ Pushes an already-built mod to its Steam Workshop item. Used by `weekly-verify`,
 verifies against the current RimWorld and republishes with no code changes.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/steam-republish@v1.10
+      - uses: RimWorks/mod-ci/.github/actions/steam-republish@v1
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
@@ -403,7 +403,7 @@ for the event.
       - name: Run semantic-release
         run: ./node_modules/.bin/semantic-release
 
-      - uses: RimWorks/mod-ci/.github/actions/discord-release@v1.10
+      - uses: RimWorks/mod-ci/.github/actions/discord-release@v1
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           mod-name: Pickle
