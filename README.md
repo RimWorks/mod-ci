@@ -251,6 +251,18 @@ folder is renamed.
 
 `args` defaults to checking `README.md`, so a repo with a `lychee.toml` does not need any inputs.
 
+A `lychee.toml` that checks relative links and heading anchors and makes no network request. A rate
+limit on Steam or GitHub would turn the run red for a reason that has nothing to do with the repo,
+while a renamed folder is what breaks a relative link:
+
+```toml
+offline = true
+include_fragments = "anchor-only"
+no_progress = true
+```
+
+`include_fragments = true` is rejected by lychee 0.24.2; the value is the string `"anchor-only"`.
+
 ### `node-build`
 
 Installs, optionally lints, builds, and uploads a Node subproject's output as an artifact. A mod
@@ -492,6 +504,9 @@ its own Steam step.
 
 Pass `steam-username` to log in up front. A stale config then fails in this step instead of partway
 through a publish.
+
+`STEAM_CONFIG_VDF` is the path of the restored file, not its contents. `semantic-release-steam` opens
+that path, so a job that sets the variable itself from a secret makes the upload fail.
 
 ### `steam-republish`
 
