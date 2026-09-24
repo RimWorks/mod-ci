@@ -319,8 +319,15 @@ and the message from each failed scenario, go to the job summary instead.
 itself. `GITHUB_TOKEN` is not declared and does not need to be: a called workflow reads it without
 a declaration.
 
-Five rules, and each one is a failing step rather than a warning. A job skipped by an `if:`
-reports as skipped, and most branch protection reads a skipped required job as green.
+Six rules for a caller. The first is a limit the workflow cannot detect. The other five are
+each a failing step rather than a warning, because a job skipped by an `if:` reports as skipped
+and most branch protection reads a skipped required job as green.
+
+**Call it once per workflow run.** The merge job uploads a fixed `merged-report` and downloads
+every `pickle-report-*` artifact in the run, so a second call in the same workflow collides on the
+first and silently folds the other call's legs into one merged report. To run a single leg
+alongside a matrix, for example one Windows job, call the `pickle-run` action directly instead:
+it is standalone, it needs no token passed in, and it skips the merge entirely.
 
 **Name the game image.** `game-image` and `game-branch` cannot both be empty: one names an image to
 pull, the other names a Steam branch to build one from. On Windows, `game-image` is required,
