@@ -28,6 +28,14 @@ on:
         description: Rebuild even when the Steam buildid has not moved.
         type: boolean
         default: false
+      windows:
+        description: Also build a Windows image, published as the linux name plus -windows.
+        type: boolean
+        default: false
+      windows-base-image:
+        description: Base image for the Windows build. Proton runs the game under Linux.
+        type: string
+        default: ghcr.io/rimworks/steam-game-image-action/runtime-base-proton:latest
     secrets:
       STEAM_USERNAME:
         required: false
@@ -40,6 +48,9 @@ on:
       skipped:
         description: True when the Steam buildid had not moved and nothing was rebuilt.
         value: ${{ jobs.image.outputs.skipped }}
+      windows-image-ref:
+        description: Windows image ref, empty unless windows was set.
+        value: ${{ jobs.image-windows.outputs.image-ref }}
 
 permissions:
   contents: read
@@ -64,6 +75,34 @@ jobs:
           app-id: ${{ inputs.app-id }}
           branch: ${{ inputs.branch }}
           image: ${{ inputs.image != '' && inputs.image || format('ghcr.io/{0}/rimworld-game', github.repository_owner) }}
+          include-paths: ${{ inputs.include-paths }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}
+
+  image-windows:
+    name: rimworld windows image
+    if: inputs.windows
+    runs-on: ubuntu-latest
+    # a windows leg is a bonus platform, so losing it does not fail the caller's run
+    continue-on-error: true
+    outputs:
+      image-ref: ${{ steps.image.outputs.image-ref }}
+      skipped: ${{ steps.image.outputs.skipped }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Build the RimWorld Windows game image
+        id: image
+        uses: RimWorks/steam-game-image-action@v2
+        with:
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+          app-id: ${{ inputs.app-id }}
+          branch: ${{ inputs.branch }}
+          steam-platform: windows
+          base-image: ${{ inputs.windows-base-image }}
+          image: ${{ inputs.image != '' && format('{0}-windows', inputs.image) || format('ghcr.io/{0}/rimworld-game-windows', github.repository_owner) }}
           include-paths: ${{ inputs.include-paths }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}

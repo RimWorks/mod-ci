@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # stage-mods.sh <harmony|concord|both> <mods-dir> <config-dir>
-#
-# Downloads the mods a suite needs, unpacks them into the game's Mods directory, and writes the
-# config the game reads at boot. Versions float to each mod's latest release, so an upstream
-# break shows up on the next run instead of on the next bump.
+# Downloads the mods a suite needs and writes the config the game boots with. Versions float,
+# so an upstream break shows up on the next run rather than the next bump.
 set -euo pipefail
 
 BACKENDS="${1:?usage: stage-mods.sh <harmony|concord|both> <mods-dir> <config-dir>}"
@@ -25,8 +23,6 @@ die() {
   exit 1
 }
 
-# Every input is checked before the first download, so a typo fails in a second rather than
-# after three minutes of staging.
 
 [[ "$BACKENDS" == "harmony" || "$BACKENDS" == "concord" || "$BACKENDS" == "both" ]] ||
   die "backend '$BACKENDS' is not harmony, concord or both"
@@ -78,8 +74,7 @@ if [[ -n "$STAGED_MODS" ]]; then
   done
 fi
 
-# stage_release_zip rm -rf's its destination, so a mount sharing a name with one is copied in and
-# then replaced by the dependency. The job stays green and the suite runs against the wrong code.
+# stage_release_zip rm -rf's its destination, so a mount sharing a name would be replaced by it
 reserved_names=()
 reserved_owners=()
 reserve() {
@@ -107,7 +102,6 @@ done
 
 mkdir -p "$MODS_DIR" "$CONFIG_DIR"
 
-# run-suite.sh mounts only $MODS_DIR, so the caller's checkout has to land inside it.
 for i in "${!mod_srcs[@]}"; do
   dest="$MODS_DIR/${mod_mounts[$i]}"
   rm -rf "$dest"
@@ -152,8 +146,7 @@ print(match[0]["browser_download_url"])')" ||
   curl -sSfL "${https_only[@]}" "$url" -o "$tmp/mod.zip" ||
     die "could not download the ${prefix}*.zip asset of ${repo}"
 
-  # These hold whatever version floats in, and they are the only thing between a compromised
-  # release asset and the runner.
+  # the only thing between a compromised release asset and the runner, and they survive a float
   bad="$(unzip -Z1 "$tmp/mod.zip" | grep -E '(^|/)\.\./|^/' || true)"
   [[ -z "$bad" ]] ||
     die "the ${repo} zip has a path traversal or absolute entry, refusing to extract"
@@ -202,8 +195,7 @@ for i in "${!staged_repos[@]}"; do
   active+=("${staged_ids[$i]}")
 done
 
-# 'self' means the checkout is pickle, so mod-dirs mounts it and mod-package-id names it.
-# 'none' is a staging-only consumer that runs no suite, so nothing loads pickle at all.
+# 'self' means the checkout is pickle. 'none' means no suite runs, so nothing loads it
 if [[ "$PICKLE_VERSION" != "self" && "$PICKLE_VERSION" != "none" ]]; then
   pickle_ref="latest"
   [[ -z "$PICKLE_VERSION" ]] || pickle_ref="tags/$PICKLE_VERSION"

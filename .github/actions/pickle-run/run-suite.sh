@@ -20,8 +20,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="${RUNNER_TEMP:-/tmp}"
 CFG="/home/app/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config"
 
-# PickleArgs.IntArg drops a value int.TryParse refuses and keeps its own 60, so an unchecked
-# typo films every scenario or leaves the watchdog above the job timeout
+# PickleArgs.IntArg silently keeps its own 60 for a value int.TryParse refuses
 for var in FILM_SECONDS RUN_TIMEOUT; do
   [[ -z "${!var}" || "${!var}" =~ ^[0-9]+$ ]] ||
     { echo "error: $var is '${!var}', not a whole number" >&2; exit 1; }
@@ -37,8 +36,7 @@ if [[ -n "$SUITE_FILTER" ]]; then
 elif [[ "$UNFILTERED" == "true" ]]; then
   run_arg="-pickle-run"
 else
-  # an unfiltered run also plays every other loaded mod's features, so the caller has to
-  # say it meant that
+  # an unfiltered run plays every other loaded mod's features, so the caller says so out loud
   echo "error: SUITE_FILTER is empty and UNFILTERED is not true" >&2
   exit 1
 fi
@@ -88,8 +86,7 @@ docker run --rm --name "pickle-suite${SET_NAME:+-$SET_NAME}" \
 game=$!
 echo "game container started, waiting for its log ..."
 
-# Process substitution, not a pipe: $! after `tail | sed` is sed's pid, so the kill below
-# misses tail and the follower holds this script's stdout open.
+# process substitution, not a pipe: $! after `tail | sed` is sed's, and the follower survives the kill
 tail -n +1 -f "$TMP/container.log" > >(sed 's/^/[container] /') &
 container_follow=$!
 
@@ -101,7 +98,6 @@ container_follow=$!
   fi ) &
 watchdog=$!
 
-# exec replaces the subshell with tail, so $! is tail rather than a parent that outlives it.
 ( until [[ -f "$REPORT_DIR/Player.log" ]]; do sleep 1; done
   exec tail -n +1 -f "$REPORT_DIR/Player.log" \
     > >(grep --line-buffered -oE 'pickle: .*') ) &

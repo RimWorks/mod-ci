@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 // merge-reports.mjs <sets-dir> [out.html]
-//
-// Every report carries its whole run in one <script id="pickle-report">, so merging never
-// renders anything: it reads each payload, tags it with its set name, and writes them all back
-// as {"sets": [...]} into a copy of the first file.
+// Reads each leg's payload, tags it with its set name, and writes them into a copy of the first.
 import { existsSync } from 'node:fs';
 import { appendFile, cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -14,12 +11,10 @@ const FILM_PREFIX = 'screenshots/film/';
 const MESSAGE_LIMIT = 300;
 const FAILURE_ROWS = 50;
 
-// Legs upload as pickle-report-<leg> while the films land under the bare name. The fallback fires
-// on the failure paths, where a dead leg has no summary.json and the directory is its only name.
+// legs upload as pickle-report-<leg>, films land under the bare name. the fallback is the dead-leg path
 export const setNameFrom = (raw) => raw.replace(/^(?:pickle-report|compat)-/, '');
 
-// BuildPayload escapes </ so a failure message cannot close the script tag it lives in.
-// JSON.parse decodes \/ on its own, so only the write side has to put it back.
+// BuildPayload escapes </ so a failure message cannot close its own script tag
 const escape = (text) => text.replaceAll('</', '<\\/');
 
 function readPayload(html) {
@@ -84,7 +79,6 @@ export async function mergeReports(setsDir, out = 'merged.html') {
     const counts = await readJson(join(legDir, 'summary.json'));
     const reportPath = join(legDir, 'report.html');
 
-    // A leg that died before WriteReports still gets a row: it is the only sign it ran at all.
     if (!existsSync(reportPath)) {
       sets.push({ name: setNameFrom(counts?.setName || dir), counts, failures: [] });
       continue;
@@ -92,8 +86,7 @@ export async function mergeReports(setsDir, out = 'merged.html') {
 
     const html = await readFile(reportPath, 'utf8');
 
-    // Pickle rewrites report.html on an interval, so a killed leg leaves a half-written one. That
-    // leg loses its own payload and nothing else: every other leg still has to reach the summary.
+    // a killed leg leaves a half-written report.html, and loses only its own payload
     let payload;
     try {
       payload = readPayload(html);
@@ -119,13 +112,11 @@ export async function mergeReports(setsDir, out = 'merged.html') {
   }
 
   if (!template) {
-    // An artifact uploaded with more than one path keeps the common ancestor, so every report sits
-    // a level below where a leg is read and the run looks like it produced nothing.
+    // a multi-path artifact keeps the common ancestor, nesting every report below where a leg is read
     const nested = sets.length > 0 && sets.every((set) => !set.counts);
     const why = nested
       ? '. No set had a summary.json either: check each suite artifact lists exactly one path, ending in a slash'
       : '';
-    // The rows are the only thing a reader gets without downloading, so they ride out on the error.
     throw Object.assign(new Error(`no set produced a report${why}`), { sets });
   }
 
@@ -135,8 +126,7 @@ export async function mergeReports(setsDir, out = 'merged.html') {
   return sets;
 }
 
-// Markdown eats a pipe and a step summary renders raw html, so a failure message quoting
-// <Thing> has to arrive escaped or it vanishes from the table.
+// markdown eats a pipe and a step summary renders raw html, so <Thing> has to arrive escaped
 function cell(text) {
   const flat = String(text).replace(/\s+/g, ' ').trim();
   const cut = flat.length > MESSAGE_LIMIT ? `${flat.slice(0, MESSAGE_LIMIT)}...` : flat;
@@ -163,7 +153,6 @@ export function stepSummary(sets, problem) {
     lines.push('| - | no set uploaded anything to merge |');
   }
 
-  // Counts alone send a reader off to download an artifact to learn what broke.
   const failed = sets.flatMap((set) => set.failures.map((row) => ({ ...row, set: set.name })));
   if (failed.length > 0) {
     lines.push('', '| Set | Feature | Scenario | Failing step | Message |', '|---|---|---|---|---|');
@@ -176,14 +165,12 @@ export function stepSummary(sets, problem) {
     }
   }
 
-  // An unreadable set has no payload to splice, so it is a row here and a missing column in
-  // Compare sets. Say so, or the next person files a bug against the dashboard.
+  // an unreadable set is a row here and a missing column in Compare sets
   const absent = sets.filter((set) => set.unreadable).map((set) => set.name);
   if (absent.length > 0 && !problem) {
     lines.push('', `Missing from Compare sets: ${absent.map(cell).join(', ')}. An unreadable report.html has no data to merge.`);
   }
 
-  // No merged.html exists when the merge itself failed, so do not send the reader to open one.
   lines.push('', problem
     ? `The merge failed: ${cell(problem)}. The rows above are everything this run reported.`
     : 'Download **merged-report** below and open `merged.html`. Select **Compare sets** to see which scenario broke under which set.');
@@ -206,7 +193,6 @@ async function main([setsDir, out = 'merged.html']) {
     console.error(`::error title=Pickle merge::${err.message}`);
   }
 
-  // A failed merge still owes the reader its counts, or they download artifacts to learn nothing ran.
   const summary = stepSummary(sets, problem);
   await (process.env.GITHUB_STEP_SUMMARY
     ? appendFile(process.env.GITHUB_STEP_SUMMARY, summary, 'utf8')

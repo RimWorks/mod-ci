@@ -9,25 +9,7 @@ import { CHECK_ORDER, decide } from '../.github/actions/pickle-run/verdict.mjs';
 
 const XIO = 'XIO:  fatal IO error 11 (Resource temporarily unavailable) on X server ":99"';
 
-// pickle rewrites report.html on an interval, so a container killed mid-write leaves one of these:
 // cut before the closing tag, or cut inside the json with the tag still there.
-const CUT_OFF = '<html><script id="pickle-report" type="application/json">{"features":[{"name":"load';
-const CUT_JSON = '<html><script id="pickle-report" type="application/json">{"features":[{</script></html>';
-
-function html(payload) {
-  const json = JSON.stringify(payload).replace(/<\//g, '<\\/');
-  return `<html><script id="pickle-report" type="application/json">${json}</script></html>`;
-}
-
-function scenario(name, message, step = 'the mod loads') {
-  return {
-    name,
-    outcome: 'Failed',
-    failureMessage: message,
-    steps: [{ keyword: 'Then', text: step, status: 'Failed' }],
-  };
-}
-
 // stamp first, then every report file, so mtimes order the way a real run leaves them
 async function fixture(files = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'mod-ci-verdict-'));
@@ -51,7 +33,7 @@ async function backdate(dir, name) {
 const passing = { total: 3, passed: 3, failed: 0, skipped: 0, flaky: 0, exitReason: 'passed' };
 
 test('passes a clean run', async (t) => {
-  const run = await fixture({ 'summary.json': passing, 'report.html': html({ features: [] }) });
+  const run = await fixture({ 'summary.json': passing });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
 
   const { code, markdown } = decide(run);
@@ -117,17 +99,6 @@ test('a stale log reads as stale, not as one that could not be read', async (t) 
   assert.deepEqual(notices, []);
 });
 
-test("a previous attempt's report.html counts as absent", async (t) => {
-  const run = await fixture({ 'summary.json': passing, 'report.html': html({ features: [] }) });
-  await backdate(run.dir, 'report.html');
-  t.after(() => rm(run.dir, { recursive: true, force: true }));
-
-  const { code, markdown } = decide(run);
-
-  assert.equal(code, 1);
-  assert.match(markdown, /failed partway/);
-});
-
 test('fails without a retry when nothing reported and no X message', async (t) => {
   const run = await fixture({ 'container.log': 'oom killed\n' });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
@@ -173,7 +144,6 @@ test('the X pattern tolerates the two spaces xlib actually writes', async (t) =>
 test('a scenario failure never reaches a retry, even with an X death in the log', async (t) => {
   const run = await fixture({
     'summary.json': { total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, exitReason: 'failed' },
-    'report.html': html({ features: [{ name: 'load.feature', mod: 'Cosmere - Core', scenarios: [scenario('loads', 'boom')] }] }),
     'Player.log': `${XIO}\n`,
   });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
@@ -184,10 +154,16 @@ test('a scenario failure never reaches a retry, even with an X death in the log'
 test('names the failing step and its message in the table', async (t) => {
   const message = "Could not load Texture2D at 'Things/Item/HemalurgicSpike'";
   const run = await fixture({
-    'summary.json': { total: 73, passed: 66, failed: 7, skipped: 0, flaky: 0, exitReason: 'failed' },
-    'report.html': html({
-      features: [{ name: 'spike.feature', mod: 'Cosmere - Core', scenarios: [scenario('spawns a spike', message)] }],
-    }),
+    'summary.json': {
+      total: 73, passed: 66, failed: 7, skipped: 0, flaky: 0, exitReason: 'failed',
+      scenarios: [{
+        name: 'spawns a spike',
+        outcome: 'Failed',
+        feature: 'spike.feature',
+        failingStep: 'Then the mod loads',
+        failureMessage: message,
+      }],
+    },
   });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
 
@@ -195,49 +171,12 @@ test('names the failing step and its message in the table', async (t) => {
 
   assert.equal(code, 1);
   assert.match(markdown, /7 of 73 scenarios failed/);
-  assert.match(markdown, /\| spike\.feature \| Cosmere - Core \| spawns a spike \| Then the mod loads \| Could not load/);
-});
-
-test('a green run with an unreadable report.html passes, but never silently', async (t) => {
-  const run = await fixture({ 'summary.json': passing, 'report.html': CUT_OFF });
-  t.after(() => rm(run.dir, { recursive: true, force: true }));
-
-  const { code, markdown, notices } = decide(run);
-
-  assert.equal(code, 0);
-  assert.match(markdown, /All 3 scenarios passed/);
-  assert.match(markdown, /No failure table: report\.html carries no pickle-report payload/);
-  assert.match(notices[0], /^::warning title=Pickle report\.html unreadable::/);
-});
-
-test('an unreadable report.html still fails a run with failures, and says why there is no table', async (t) => {
-  const run = await fixture({
-    'summary.json': { total: 5, passed: 3, failed: 2, skipped: 0, flaky: 0, exitReason: 'failed' },
-    'report.html': CUT_JSON,
-  });
-  t.after(() => rm(run.dir, { recursive: true, force: true }));
-
-  const { code, markdown } = decide(run);
-
-  assert.equal(code, 1);
-  assert.match(markdown, /2 of 5 scenarios failed/);
-  assert.match(markdown, /No failure table: report\.html payload is not readable/);
-});
-
-test('fails when the report write threw before report.html', async (t) => {
-  const run = await fixture({ 'summary.json': passing });
-  t.after(() => rm(run.dir, { recursive: true, force: true }));
-
-  const { code, markdown } = decide(run);
-
-  assert.equal(code, 1);
-  assert.match(markdown, /failed partway/);
+  assert.match(markdown, /\| spike\.feature \| spawns a spike \| Then the mod loads \| Could not load/);
 });
 
 test('an empty run prints what the filter should have matched', async (t) => {
   const run = await fixture({
     'summary.json': { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, exitReason: 'infrastructure-error' },
-    'report.html': html({ features: [] }),
     'Player.log': [
       'some engine noise',
       "pickle: filter 'Cosmre' matched no scenarios.",
@@ -259,7 +198,6 @@ test('an empty run prints what the filter should have matched', async (t) => {
 test('labels the counts partial when the watchdog killed the run', async (t) => {
   const run = await fixture({
     'summary.json': { total: 11, passed: 11, failed: 0, skipped: 0, flaky: 0, exitReason: 'watchdog-timeout' },
-    'report.html': html({ features: [] }),
   });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
 
@@ -270,7 +208,7 @@ test('labels the counts partial when the watchdog killed the run', async (t) => 
 });
 
 test('a nonzero container exit alone passes with a notice', async (t) => {
-  const run = await fixture({ 'summary.json': passing, 'report.html': html({ features: [] }) });
+  const run = await fixture({ 'summary.json': passing });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
 
   const { code, notices } = decide({ ...run, status: 1 });
@@ -282,7 +220,6 @@ test('a nonzero container exit alone passes with a notice', async (t) => {
 test('flaky scenarios pass and get counted', async (t) => {
   const run = await fixture({
     'summary.json': { total: 3, passed: 3, failed: 0, skipped: 0, flaky: 2, exitReason: 'passed' },
-    'report.html': html({ features: [] }),
   });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
 
@@ -293,7 +230,7 @@ test('flaky scenarios pass and get counted', async (t) => {
 });
 
 test('refuses to judge without a stamp', async (t) => {
-  const run = await fixture({ 'summary.json': passing, 'report.html': html({ features: [] }) });
+  const run = await fixture({ 'summary.json': passing });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
 
   const { code, markdown } = decide({ ...run, stamp: join(run.dir, 'nope') });
@@ -334,7 +271,6 @@ test('a bare boot line counts as loaded', async (t) => {
 test('a leg that reported keeps exit 1, so a comparison leg can absorb it', async (t) => {
   const run = await fixture({
     'summary.json': JSON.stringify({ total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, exitReason: 'failed' }),
-    'report.html': '<html></html>',
     'container.log': 'exit 1\n',
   });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
@@ -344,16 +280,15 @@ test('a leg that reported keeps exit 1, so a comparison leg can absorb it', asyn
 
 
 // the nine checks are a list now, so nothing but this stops a reorder
-test('the nine checks keep their order and their numbers', () => {
+test('the eight checks keep their order and their numbers', () => {
   assert.deepEqual(CHECK_ORDER, [
     '1:no-stamp',
     '2:never-reported',
     '3:unreadable-summary',
-    '4:report-write-threw',
-    '5:zero-scenarios',
-    '6:scenarios-failed',
-    '7:did-not-finish',
-    '8:passed',
+    '4:zero-scenarios',
+    '5:scenarios-failed',
+    '6:did-not-finish',
+    '7:passed',
   ]);
 });
 

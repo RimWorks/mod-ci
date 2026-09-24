@@ -95,8 +95,7 @@ on:
         type: number
         default: 0
     secrets:
-      # GITHUB_TOKEN is not declared: a called workflow reads secrets.GITHUB_TOKEN and
-      # github.token without one, the way dotnet-build.yml:76 does.
+      # GITHUB_TOKEN is not declared: a called workflow reads it without one
       DOCBIN_TOKEN:
         required: false
       STEAM_USERNAME:
@@ -104,13 +103,11 @@ on:
       STEAM_CONFIG_VDF_B64:
         required: false
     outputs:
-      # no per-leg outputs: one string slot per name means the surviving value belongs to whichever
-      # leg finished last. each leg uploads pickle-report-<leg> instead.
+      # no per-leg outputs: one slot per name, so the last leg to finish wins it
       report-artifact:
         description: Artifact holding the merged report, or empty when no leg reported.
         value: ${{ jobs.merge.outputs.report-artifact }}
 
-# a called workflow inherits the caller's scopes unless it declares its own.
 permissions:
   contents: read
 
@@ -123,8 +120,6 @@ jobs:
     outputs:
       matrix: ${{ steps.read.outputs.matrix }}
     steps:
-      # a refusal is a failing step, never an `if:` that skips it. branch protection reads a
-      # skipped required job as green.
       - name: Check the inputs
         env:
           GAME_IMAGE: ${{ inputs.game-image }}
@@ -156,8 +151,6 @@ jobs:
 
           die() { printf 'error: %s\n' "$@" >&2; exit 1; }
 
-          # GHA expressions cannot map a string array into objects, so both shapes become one
-          # {name, backend, extraMods} here and every leg downstream reads the same fields.
           if [[ -n "$MOD_SETS" ]]; then
             legs="$(jq -c '.' <<< "$MOD_SETS")" || die "mod-sets is not valid json"
           else
@@ -185,12 +178,10 @@ jobs:
           dups="$(jq -r '.set[].name' <<< "$matrix" | sort | uniq -d | paste -sd, -)"
           [[ -z "$dups" ]] || die "these set names repeat: $dups. each leg uploads pickle-report-<name>."
 
-          # stage-mods.sh refuses a bad backend too, but only after the build and the image pull
           bad="$(jq -r '[.set[].backend | select(. != "harmony" and . != "concord" and . != "both")] | join(", ")' <<< "$matrix")"
           [[ -z "$bad" ]] || die "backend '$bad' is not harmony, concord or both"
 
-          # stage-mods.sh refuses these too, but only after the build and the image pull. a
-          # string-format error should not cost a container start.
+          # staging refuses these too, but only after the build and the image pull
           malformed="$(jq -r '
             [.set[] | .staged | select(. != "") | split(",")[]
              | select((split(":") | length) != 3)] | join(", ")' <<< "$matrix")"
@@ -217,17 +208,13 @@ jobs:
   suite:
     name: suite (${{ matrix.set.name }})
     needs: [sets, game-image]
-    # the image job is skipped when the caller passes a ref, and a skipped need skips this job
-    # unless the condition says otherwise.
     if: ${{ !cancelled() && needs.sets.result == 'success' && needs.game-image.result != 'failure' }}
     runs-on: ubuntu-latest
-    # a composite action cannot set a job timeout, so the real one is here and the action is handed
-    # the same number to check run-timeout and retries against.
+    # a composite action cannot set a job timeout, so the real one is here and the action gets a copy
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: read
       packages: read
-      # gh run download reads this run's artifacts
       actions: read
     strategy:
       fail-fast: false
@@ -237,7 +224,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # the verdict inside the action is node, same as the merge job
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -247,7 +233,7 @@ jobs:
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
-      # download-artifact takes one name per step, so a list of pairs goes through the api instead
+      # download-artifact takes one name per step, and this list is a runtime value
       - name: Download the build artifacts
         if: inputs.build-artifacts != ''
         env:
@@ -269,8 +255,6 @@ jobs:
         if: inputs.build-command != ''
         run: ${{ inputs.build-command }}
 
-      # not ./ : a called workflow only has the caller's repo checked out, so a relative path
-      # finds nothing. sonar.yml:119-120 records the same reason.
       - uses: RimWorks/mod-ci/.github/actions/pickle-run@v1
         with:
           game-image: ${{ inputs.game-image != '' && inputs.game-image || needs.game-image.outputs.image-ref }}
@@ -291,8 +275,7 @@ jobs:
           run-timeout: ${{ inputs.run-timeout }}
           timeout-minutes: ${{ inputs.timeout-minutes }}
           retries: ${{ inputs.retries }}
-          # a mod-sets leg tests a dependency combination, so a red set is its answer, not a
-          # failure. this absorbs the verdict only; a container that never came up still fails.
+          # a red set is a comparison's answer. exit 2, a container that never came up, still fails
           report-only: ${{ inputs.mod-sets != '' }}
           report-dir: ${{ env.REPORT_DIR }}
 
@@ -320,8 +303,7 @@ jobs:
             echo "docbin upload did not return a url: $out"
           fi
 
-      # one path, trailing slash: a second path makes GHA keep the common ancestor, and
-      # merge-reports.mjs then reads no leg at all
+      # one path, trailing slash: a second makes GHA nest every report and the merge reads no leg
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -362,8 +344,6 @@ jobs:
           pattern: pickle-report-*
           path: sets
 
-      # the script copies the films, writes the step summary down to the per-scenario failure
-      # message, and handles a leg that never reported. nothing here reads a summary.json.
       - name: Merge the reports
         id: merge
         run: node .mod-ci/.github/actions/pickle-run/merge-reports.mjs sets merged.html

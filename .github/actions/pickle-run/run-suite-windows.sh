@@ -14,8 +14,7 @@ RUN_TIMEOUT="${RUN_TIMEOUT:-}"
 
 TMP="${RUNNER_TEMP:-/tmp}"
 
-# PickleArgs.IntArg drops a value int.TryParse refuses and keeps its own 60, so an unchecked
-# typo leaves the watchdog above the job timeout
+# PickleArgs.IntArg silently keeps its own 60 for a value int.TryParse refuses
 [[ -z "$RUN_TIMEOUT" || "$RUN_TIMEOUT" =~ ^[0-9]+$ ]] ||
   { echo "error: RUN_TIMEOUT is '$RUN_TIMEOUT', not a whole number" >&2; exit 1; }
 
@@ -29,8 +28,7 @@ if [[ -n "$SUITE_FILTER" ]]; then
 elif [[ "$UNFILTERED" == "true" ]]; then
   run_arg="-pickle-run"
 else
-  # an unfiltered run also plays every other loaded mod's features, so the caller has to
-  # say it meant that
+  # an unfiltered run plays every other loaded mod's features, so the caller says so out loud
   echo "error: SUITE_FILTER is empty and UNFILTERED is not true" >&2
   exit 1
 fi
@@ -42,8 +40,7 @@ mkdir -p "$REPORT_DIR"
 chmod 777 "$REPORT_DIR"
 
 echo "running: $run_arg"
-# no ffmpeg and no published port in the windows container, so film and the live dashboard
-# stay off here whatever the caller asked for
+# no ffmpeg and no published port in this container, so both stay off whatever the caller asked
 game_args=("$run_arg" '-pickle-max-film-seconds=0')
 if [[ -n "$SET_NAME" ]]; then
   game_args+=("-pickle-set-name=$SET_NAME")
@@ -53,8 +50,7 @@ if [[ -n "$RUN_TIMEOUT" ]]; then
 fi
 
 : > "$TMP/container.log"
-# GenFilePaths.ConfigFolderPath is savedatafolder plus Config, so CONFIG_DIR is the Config dir
-# itself here as it is on linux, and one staged directory feeds both platforms
+# GenFilePaths.ConfigFolderPath is savedatafolder plus Config, so one staged dir feeds both platforms
 docker run --rm --name pickle-suite-win \
   -v "$MODS_DIR:/game/Mods:ro" \
   -v "$CONFIG_DIR:/config/Config" \
@@ -66,7 +62,6 @@ docker run --rm --name pickle-suite-win \
   > "$TMP/container.log" 2>&1 &
 game=$!
 
-# exec replaces the subshell with tail, so $! is tail rather than a parent that outlives it.
 ( until [[ -f "$REPORT_DIR/Player.log" ]]; do sleep 2; done
   exec tail -n +1 -f "$REPORT_DIR/Player.log" \
     > >(grep --line-buffered -oE 'pickle: .*') ) &

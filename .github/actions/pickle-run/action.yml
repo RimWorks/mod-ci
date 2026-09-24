@@ -73,8 +73,7 @@ outputs:
 runs:
   using: composite
   steps:
-    # a refusal is a failing step, never an `if:` that skips it. branch protection reads a
-    # skipped required job as green.
+    # a refusal is a failing step: branch protection reads a skipped required job as green
     - name: Check the inputs
       shell: bash
       env:
@@ -88,16 +87,14 @@ runs:
       run: |
         set -euo pipefail
 
-        # cosmere's ci.yml:106-108 budgets 15 minutes around PICKLE_RUN_TIMEOUT for checkout,
-        # build, the ghcr pull and staging, and ci.yml:176 is the 45-vs-15 pair it shipped.
+        # 15 is what cosmere's ci.yml:106-108 budgets for checkout, build, the pull and staging
         OVERHEAD_MINUTES=15
 
         die() { printf 'error: %s\n' "$@" >&2; exit 1; }
 
         for pair in "run-timeout=$RUN_TIMEOUT" "timeout-minutes=$TIMEOUT_MINUTES" \
                     "retries=$RETRIES" "leg-index=$LEG_INDEX"; do
-          # a GitHub number input arrives as a string, so a typo reaches the arithmetic intact
-          # and $((x + abc)) quietly reads abc as zero.
+          # a number input arrives as a string, and $((x + abc)) reads abc as zero
           [[ "${pair#*=}" =~ ^[0-9]+$ ]] ||
             die "${pair%%=*} is '${pair#*=}', which is not a whole number"
         done
@@ -115,8 +112,6 @@ runs:
                 "run-suite-windows.sh publishes no port and never starts the tunnel."
         fi
 
-        # every attempt has to finish inside the job timeout, or GitHub kills the container
-        # mid-run and the only summary.json left says in-progress.
         needed=$(( (RETRIES + 1) * RUN_TIMEOUT + OVERHEAD_MINUTES ))
         (( needed < TIMEOUT_MINUTES )) ||
           die "timeout-minutes is '$TIMEOUT_MINUTES', and this leg needs more than that." \
@@ -170,8 +165,7 @@ runs:
       run: |
         set -euo pipefail
 
-        # GHA cannot default one input to another, so an empty filter resolves here. an
-        # unfiltered run also plays every other loaded mod's features.
+        # GHA cannot default one input to another, so an empty filter resolves here
         if [[ -z "$SUITE_FILTER" && "$UNFILTERED" != true ]]; then
           SUITE_FILTER="$MOD_NAME"
         fi
@@ -183,14 +177,12 @@ runs:
         runner="${{ github.action_path }}/run-suite.sh"
         [[ "$PLATFORM" == linux ]] || runner="${{ github.action_path }}/run-suite-windows.sh"
 
-        # both runners capture the container's stdout here, and the X-server retry grep reads it.
-        # verdict.mjs has no default for it, so this path is not optional.
+        # both runners write the container's stdout here, and verdict.mjs has no default for it
         container_log="$RUNNER_TEMP/container.log"
 
         attempts=$(( RETRIES + 1 ))
         for attempt in $(seq 1 "$attempts"); do
           echo "::group::pickle suite attempt $attempt of $attempts"
-          # the stamp is the only way the verdict tells this attempt's report from the last one
           stamp="$(mktemp)"
           status=0
           "$runner" "$GAME_IMAGE" "$RUNNER_TEMP/mods" "$RUNNER_TEMP/config" "$REPORT_DIR" || status=$?
@@ -200,11 +192,9 @@ runs:
           node "${{ github.action_path }}/verdict.mjs" \
             "$REPORT_DIR" "$status" "$stamp" "$container_log" || verdict=$?
 
-          # 75 is the one retryable verdict: no report at all plus a dead X server. everything
-          # past that check had a report to read, so a failed scenario can never land here.
+          # 75 is the one retryable verdict: no report at all, plus a dead X server
           if [[ "$verdict" != 75 ]]; then
-            # a comparison run absorbs a verdict that read a report, and nothing else. 2 is "no
-            # report to read", and a container that never came up is not a comparison result.
+            # a comparison absorbs a verdict that read a report. 2 means there was none to read
             if [[ "$REPORT_ONLY" == "true" && "$verdict" != 2 ]]; then
               if [[ "$verdict" != 0 ]]; then
                 echo "::warning title=Pickle suite::verdict $verdict, reported not gated"
