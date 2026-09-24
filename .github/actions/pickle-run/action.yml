@@ -56,6 +56,11 @@ inputs:
   retries:
     description: Extra container attempts for a dead X server only
     default: '0'
+  report-only:
+    description: >
+      Report the verdict instead of failing the job. pickle-suite.yml sets this for a mod-sets
+      leg, where a comparison is the point and a red set is the answer. Not a consumer knob.
+    default: 'false'
   report-dir:
     description: Where the container writes summary.json, report.html, junit.xml and Player.log
     default: ${{ github.workspace }}/pickle-reports
@@ -153,6 +158,7 @@ runs:
         PLATFORM: ${{ inputs.platform }}
         REPORT_DIR: ${{ inputs.report-dir }}
         RETRIES: ${{ inputs.retries }}
+        REPORT_ONLY: ${{ inputs.report-only }}
         SUITE_FILTER: ${{ inputs.suite-filter }}
         MOD_NAME: ${{ inputs.mod-name }}
         UNFILTERED: ${{ inputs.unfiltered }}
@@ -196,7 +202,25 @@ runs:
 
           # 75 is the one retryable verdict: no report at all plus a dead X server. everything
           # past that check had a report to read, so a failed scenario can never land here.
-          [[ "$verdict" == 75 ]] || exit "$verdict"
+          if [[ "$verdict" != 75 ]]; then
+            # a comparison run absorbs a verdict that read a report, and nothing else. 2 is "no
+            # report to read", and a container that never came up is not a comparison result.
+            if [[ "$REPORT_ONLY" == "true" && "$verdict" != 2 ]]; then
+              if [[ "$verdict" != 0 ]]; then
+                echo "::warning title=Pickle suite::verdict $verdict, reported not gated"
+              fi
+              exit 0
+            fi
+            exit "$verdict"
+          fi
+
+          # a stale XIO line here would make the next attempt's own failure read as another X death
+          if [[ -d "$REPORT_DIR" ]]; then
+            flaked="${REPORT_DIR}-x-server-death-${attempt}"
+            rm -rf "$flaked"
+            mv "$REPORT_DIR" "$flaked"
+            echo "attempt $attempt kept at $flaked"
+          fi
         done
 
         echo "::error title=Pickle suite::the X server died on all $attempts attempt(s)"

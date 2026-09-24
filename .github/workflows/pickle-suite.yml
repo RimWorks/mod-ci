@@ -1,0 +1,372 @@
+name: pickle suite
+
+# Builds the caller's mod, plays a Pickle suite against the game in a container, and merges every
+# leg into one report. Pickle and Cosmere each carried a near-copy of this before it moved here.
+
+on:
+  workflow_call:
+    inputs:
+      mod-name:
+        description: Mod name from About.xml, spaces included. Names the mount and is the default suite filter.
+        type: string
+        required: true
+      mod-package-id:
+        description: Newline list of the caller's packageIds, written last in ModsConfig.xml.
+        type: string
+        required: true
+      mod-dirs:
+        description: "Newline list of checkout-path:MountName. Empty mounts the repo root as mod-name."
+        type: string
+        default: ''
+      suite-filter:
+        description: Value for -pickle-run. Empty falls back to mod-name, so a run plays its own features.
+        type: string
+        default: ''
+      unfiltered:
+        description: Run every discovered feature, including the ones other loaded mods ship.
+        type: boolean
+        default: false
+      game-image:
+        description: Image ref to pull. Empty builds one from game-branch.
+        type: string
+        default: ''
+      game-branch:
+        description: Steam branch the internal image job downloads, for example version-1.6.4871.
+        type: string
+        default: ''
+      game-version:
+        description: "<version> written into ModsConfig.xml. Not derived from the image."
+        type: string
+        default: '1.6'
+      backends:
+        description: JSON array of harmony, concord or both. One leg per entry.
+        type: string
+        default: '["harmony"]'
+      mod-sets:
+        description: "JSON array of {name, backend, extraMods}. Replaces backends, and its legs report instead of gating."
+        type: string
+        default: ''
+      staged-mods:
+        description: "Comma separated owner/repo:AssetPrefix:packageId of extra mods every leg stages."
+        type: string
+        default: ''
+      pickle-version:
+        description: "Pickle release to stage: 'self' when the checkout is Pickle, empty to float to latest, a tag, or 'none'."
+        type: string
+        default: ''
+      build-command:
+        description: Builds the caller's mod before staging. Empty skips the build.
+        type: string
+        default: dotnet build -c Release
+      build-artifacts:
+        description: "Newline list of name:path artifacts downloaded before the build, such as a dashboard bundle."
+        type: string
+        default: ''
+      dotnet-version:
+        description: Passed to setup-dotnet. Empty skips it, for a build that needs no SDK.
+        type: string
+        default: 10.0.x
+      platform:
+        description: linux or windows. A windows leg needs game-image, since the image job builds a linux one.
+        type: string
+        default: linux
+      run-timeout:
+        description: Value for -pickle-run-timeout, minutes. Pickle's own watchdog, and it has to trip first.
+        type: number
+        default: 30
+      timeout-minutes:
+        description: "Job timeout. The rule the action enforces: (retries + 1) * run-timeout + 15 < this."
+        type: number
+        default: 70
+      film-seconds:
+        description: Value for -pickle-max-film-seconds. 0 skips the ffmpeg download.
+        type: number
+        default: 0
+      live-dashboard:
+        description: Expose Pickle's dashboard over a cloudflared tunnel while a leg runs.
+        type: boolean
+        default: false
+      publish-report:
+        description: Push report.html to docbin and link it from the step summary. Needs DOCBIN_TOKEN.
+        type: boolean
+        default: false
+      retries:
+        description: Extra container attempts for a dead X server only. Raise timeout-minutes with it.
+        type: number
+        default: 0
+    secrets:
+      # GITHUB_TOKEN is not declared: a called workflow reads secrets.GITHUB_TOKEN and
+      # github.token without one, the way dotnet-build.yml:76 does.
+      DOCBIN_TOKEN:
+        required: false
+      STEAM_USERNAME:
+        required: false
+      STEAM_CONFIG_VDF_B64:
+        required: false
+    outputs:
+      # no per-leg outputs: one string slot per name means the surviving value belongs to whichever
+      # leg finished last. each leg uploads pickle-report-<leg> instead.
+      report-artifact:
+        description: Artifact holding the merged report, or empty when no leg reported.
+        value: ${{ jobs.merge.outputs.report-artifact }}
+
+# a called workflow inherits the caller's scopes unless it declares its own.
+permissions:
+  contents: read
+
+# no concurrency here: github.ref is the caller's, so two callers on one ref would cancel each other
+
+jobs:
+  sets:
+    name: read the sets
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.read.outputs.matrix }}
+    steps:
+      # a refusal is a failing step, never an `if:` that skips it. branch protection reads a
+      # skipped required job as green.
+      - name: Check the inputs
+        env:
+          GAME_IMAGE: ${{ inputs.game-image }}
+          GAME_BRANCH: ${{ inputs.game-branch }}
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+
+          die() { printf 'error: %s\n' "$@" >&2; exit 1; }
+
+          if [[ -z "$GAME_IMAGE" && -z "$GAME_BRANCH" ]]; then
+            die "game-image and game-branch are both empty." \
+                "pass an image ref, or a steam branch for this workflow to build one from."
+          fi
+
+          # game-image.yml downloads the linux depot, so nothing here can produce a windows ref
+          [[ "$PLATFORM" != windows || -n "$GAME_IMAGE" ]] ||
+            die "platform is 'windows' and game-image is empty." \
+                "the image job builds a linux image, so a windows leg has to be handed its own ref."
+
+      - name: Read the sets
+        id: read
+        env:
+          BACKENDS: ${{ inputs.backends }}
+          MOD_SETS: ${{ inputs.mod-sets }}
+          STAGED_MODS: ${{ inputs.staged-mods }}
+        run: |
+          set -euo pipefail
+
+          die() { printf 'error: %s\n' "$@" >&2; exit 1; }
+
+          # GHA expressions cannot map a string array into objects, so both shapes become one
+          # {name, backend, extraMods} here and every leg downstream reads the same fields.
+          if [[ -n "$MOD_SETS" ]]; then
+            legs="$(jq -c '.' <<< "$MOD_SETS")" || die "mod-sets is not valid json"
+          else
+            legs="$(jq -c 'map({name: ., backend: .})' <<< "$BACKENDS")" ||
+              die "backends is not a valid json array"
+          fi
+
+          # GHA has no matrix index, and the index is what keeps two live dashboards off one port.
+          # compat-sets.json names its sets compat-<x>, and that prefix must not reach the leg name.
+          matrix="$(jq -c --arg staged "$STAGED_MODS" '
+            {set: to_entries | map(.value as $leg | {
+              name: (($leg.name // $leg.backend // "") | sub("^compat-"; "")),
+              backend: ($leg.backend // "harmony"),
+              staged: ([$staged, ($leg.extraMods // "")] | map(select(. != "")) | join(",")),
+              index: .key
+            })}' <<< "$legs")" || die "a set is not an object with a name and a backend"
+
+          count="$(jq '.set | length' <<< "$matrix")"
+          (( count > 0 )) || die "no legs to run. backends is an empty array and mod-sets is empty."
+
+          nameless="$(jq -r '[.set[] | select(.name == "")] | length' <<< "$matrix")"
+          (( nameless == 0 )) || die "$nameless set(s) have no name. a set needs one to upload under."
+
+          # two legs sharing a name means the second upload-artifact fails, half an hour in
+          dups="$(jq -r '.set[].name' <<< "$matrix" | sort | uniq -d | paste -sd, -)"
+          [[ -z "$dups" ]] || die "these set names repeat: $dups. each leg uploads pickle-report-<name>."
+
+          # stage-mods.sh refuses a bad backend too, but only after the build and the image pull
+          bad="$(jq -r '[.set[].backend | select(. != "harmony" and . != "concord" and . != "both")] | join(", ")' <<< "$matrix")"
+          [[ -z "$bad" ]] || die "backend '$bad' is not harmony, concord or both"
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "$matrix" | jq .
+
+  game-image:
+    name: rimworld image
+    needs: sets
+    if: inputs.game-image == ''
+    # pinned rather than ./ so the call cannot resolve against a consumer's own game-image.yml
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v1
+    permissions:
+      contents: read
+      packages: write
+    secrets:
+      STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+      STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+    with:
+      branch: ${{ inputs.game-branch }}
+
+  suite:
+    name: suite (${{ matrix.set.name }})
+    needs: [sets, game-image]
+    # the image job is skipped when the caller passes a ref, and a skipped need skips this job
+    # unless the condition says otherwise.
+    if: ${{ !cancelled() && needs.sets.result == 'success' && needs.game-image.result != 'failure' }}
+    runs-on: ubuntu-latest
+    # a composite action cannot set a job timeout, so the real one is here and the action is handed
+    # the same number to check run-timeout and retries against.
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      packages: read
+      # gh run download reads this run's artifacts
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.sets.outputs.matrix) }}
+    env:
+      REPORT_DIR: ${{ github.workspace }}/pickle-reports
+    steps:
+      - uses: actions/checkout@v7
+
+      # the verdict inside the action is node, same as the merge job
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-dotnet@v6
+        if: inputs.dotnet-version != ''
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      # download-artifact takes one name per step, so a list of pairs goes through the api instead
+      - name: Download the build artifacts
+        if: inputs.build-artifacts != ''
+        env:
+          BUILD_ARTIFACTS: ${{ inputs.build-artifacts }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r pair; do
+            [[ -n "${pair// /}" ]] || continue
+            name="${pair%%:*}"
+            dest="${pair#*:}"
+            [[ -n "$name" && -n "$dest" && "$dest" != "$pair" ]] ||
+              { printf "error: build-artifacts entry '%s' is not name:path\n" "$pair" >&2; exit 1; }
+            gh run download "$GITHUB_RUN_ID" --name "$name" --dir "$dest"
+          done <<< "$BUILD_ARTIFACTS"
+
+      - name: Build the mod
+        if: inputs.build-command != ''
+        run: ${{ inputs.build-command }}
+
+      # not ./ : a called workflow only has the caller's repo checked out, so a relative path
+      # finds nothing. sonar.yml:119-120 records the same reason.
+      - uses: RimWorks/mod-ci/.github/actions/pickle-run@v1
+        with:
+          game-image: ${{ inputs.game-image != '' && inputs.game-image || needs.game-image.outputs.image-ref }}
+          mod-name: ${{ inputs.mod-name }}
+          mod-package-id: ${{ inputs.mod-package-id }}
+          mod-dirs: ${{ inputs.mod-dirs }}
+          backend: ${{ matrix.set.backend }}
+          game-version: ${{ inputs.game-version }}
+          staged-mods: ${{ matrix.set.staged }}
+          pickle-version: ${{ inputs.pickle-version }}
+          suite-filter: ${{ inputs.suite-filter }}
+          unfiltered: ${{ inputs.unfiltered }}
+          set-name: ${{ matrix.set.name }}
+          platform: ${{ inputs.platform }}
+          film-seconds: ${{ inputs.film-seconds }}
+          live-dashboard: ${{ inputs.live-dashboard }}
+          leg-index: ${{ matrix.set.index }}
+          run-timeout: ${{ inputs.run-timeout }}
+          timeout-minutes: ${{ inputs.timeout-minutes }}
+          retries: ${{ inputs.retries }}
+          # a mod-sets leg tests a dependency combination, so a red set is its answer, not a
+          # failure. this absorbs the verdict only; a container that never came up still fails.
+          report-only: ${{ inputs.mod-sets != '' }}
+          report-dir: ${{ env.REPORT_DIR }}
+
+      - name: Publish the report
+        if: ${{ always() && inputs.publish-report }}
+        env:
+          DOCBIN_TOKEN: ${{ secrets.DOCBIN_TOKEN }}
+          SET_NAME: ${{ matrix.set.name }}
+        run: |
+          if [[ -z "${DOCBIN_TOKEN:-}" || ! -f "$REPORT_DIR/report.html" ]]; then
+            echo "skipping the docbin upload (no token or no report)"
+            exit 0
+          fi
+
+          out="$(npx -y docbin@1.13.0 push "$REPORT_DIR/report.html" \
+            --name "pickle-$SET_NAME-$GITHUB_RUN_ID" --type html \
+            --visibility unlisted --expires 30d 2>&1 | head -1)"
+          url="${out%% (*}"
+
+          if [[ "$url" == https://* ]]; then
+            echo "::notice title=Pickle report::${url}"
+            echo "<a href=\"${url}\" target=\"_blank\" rel=\"noopener\"><strong>Open the report</strong></a> - failures carry screenshots." \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "docbin upload did not return a url: $out"
+          fi
+
+      # always: a failed leg's Player.log is the only place its cause is written down.
+      # one path, trailing slash: merge-reports.mjs reads a leg as <artifact>/report.html, and a
+      # second path here would make GHA keep the common ancestor and nest every report a level down.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pickle-report-${{ matrix.set.name }}
+          path: ${{ env.REPORT_DIR }}/
+          if-no-files-found: warn
+
+      # a different stem, so the merge's pickle-report-* pattern cannot pick these up as legs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: x-server-death-${{ matrix.set.name }}
+          path: ${{ env.REPORT_DIR }}-x-server-death-*
+          if-no-files-found: ignore
+
+  merge:
+    name: merged report
+    needs: suite
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      report-artifact: ${{ steps.merge.outcome == 'success' && 'merged-report' || '' }}
+    steps:
+      # the caller's checkout has no merge script, so mod-ci comes down beside it
+      - uses: actions/checkout@v7
+        with:
+          repository: RimWorks/mod-ci
+          ref: v1
+          path: .mod-ci
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: pickle-report-*
+          path: sets
+
+      # the script copies the films, writes the step summary down to the per-scenario failure
+      # message, and handles a leg that never reported. nothing here reads a summary.json.
+      - name: Merge the reports
+        id: merge
+        run: node .mod-ci/.github/actions/pickle-run/merge-reports.mjs sets merged.html
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: merged-report
+          path: |
+            merged.html
+            screenshots/
+          if-no-files-found: warn

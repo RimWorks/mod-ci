@@ -41,6 +41,12 @@ async function fixture(files = {}) {
   return { dir, stamp, containerLog: join(dir, 'container.log') };
 }
 
+// older than the stamp fixture() wrote, so the file reads as a previous attempt's leftover
+async function backdate(dir, name) {
+  const old = new Date(Date.now() - 120_000);
+  await utimes(join(dir, name), old, old);
+}
+
 const passing = { total: 3, passed: 3, failed: 0, skipped: 0, flaky: 0, exitReason: 'passed' };
 
 test('passes a clean run', async (t) => {
@@ -69,14 +75,56 @@ test('finds the X death in the container log too', async (t) => {
 
 test('a stale summary.json is not this run reporting', async (t) => {
   const run = await fixture({ 'summary.json': passing, 'container.log': 'line\n' });
-  const old = new Date(Date.now() - 120_000);
-  await utimes(join(run.dir, 'summary.json'), old, old);
+  await backdate(run.dir, 'summary.json');
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  const { code, markdown } = decide(run);
+
+  assert.equal(code, 2);
+  assert.match(markdown, /never reported/);
+});
+
+test("a previous attempt's X death does not retry this one", async (t) => {
+  const run = await fixture({ 'Player.log': `boot\n${XIO}\n`, 'container.log': 'docker: pull denied (403)\n' });
+  await backdate(run.dir, 'Player.log');
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  const { code, markdown } = decide(run);
+
+  assert.equal(code, 2);
+  assert.match(markdown, /never reported/);
+  assert.match(markdown, /pull denied \(403\)/);
+});
+
+test('the same X death newer than the stamp still retries', async (t) => {
+  const run = await fixture({ 'Player.log': `boot\n${XIO}\n`, 'container.log': 'docker: pull denied (403)\n' });
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  assert.equal(decide(run).code, 75);
+});
+
+test('a stale log reads as stale, not as one that could not be read', async (t) => {
+  const run = await fixture({ 'Player.log': `${XIO}\n`, 'container.log': 'mount source does not exist\n' });
+  await backdate(run.dir, 'Player.log');
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  const { code, markdown, notices } = decide(run);
+
+  assert.equal(code, 2);
+  assert.match(markdown, /Player\.log` predates the stamp/);
+  assert.ok(!markdown.includes('ran blind'));
+  assert.deepEqual(notices, []);
+});
+
+test("a previous attempt's report.html counts as absent", async (t) => {
+  const run = await fixture({ 'summary.json': passing, 'report.html': html({ features: [] }) });
+  await backdate(run.dir, 'report.html');
   t.after(() => rm(run.dir, { recursive: true, force: true }));
 
   const { code, markdown } = decide(run);
 
   assert.equal(code, 1);
-  assert.match(markdown, /never reported/);
+  assert.match(markdown, /failed partway/);
 });
 
 test('fails without a retry when nothing reported and no X message', async (t) => {
@@ -85,7 +133,7 @@ test('fails without a retry when nothing reported and no X message', async (t) =
 
   const { code, markdown } = decide({ ...run, status: 137 });
 
-  assert.equal(code, 1);
+  assert.equal(code, 2);
   assert.match(markdown, /oom killed/);
 });
 
@@ -95,7 +143,7 @@ test('a missing container log is reported, not read as "no X death"', async (t) 
 
   const { code, markdown, notices } = decide(run);
 
-  assert.equal(code, 1);
+  assert.equal(code, 2);
   assert.match(markdown, /No container log to grep/);
   assert.match(markdown, /ran blind/);
   assert.match(notices[0], /^::error title=Pickle container log missing::/);
@@ -107,7 +155,7 @@ test('an empty container log counts as unread, not as a clean grep', async (t) =
 
   const { code, markdown } = decide(run);
 
-  assert.equal(code, 1);
+  assert.equal(code, 2);
   assert.match(markdown, /ran blind/);
 });
 
@@ -249,6 +297,46 @@ test('refuses to judge without a stamp', async (t) => {
 
   const { code, markdown } = decide({ ...run, stamp: join(run.dir, 'nope') });
 
-  assert.equal(code, 1);
+  assert.equal(code, 2);
   assert.match(markdown, /No stamp file/);
+});
+
+test('a Player.log with no boot line says Pickle never loaded', async (t) => {
+  const run = await fixture({ 'Player.log': 'Mono path[0] = ...\nvanilla boot\n', 'container.log': 'exit 0\n' });
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  const { code, markdown } = decide(run);
+
+  assert.equal(code, 2);
+  assert.match(markdown, /Pickle never loaded/);
+  assert.match(markdown, /ModsConfig\.xml/);
+});
+
+test('a decorated boot line still counts as loaded', async (t) => {
+  // RimLogging wraps the line differently by config, so the match cannot be anchored
+  const decorated = '<color=#A5C2A5>[2026-09-07 02:15:37.708] [INFO] [default] [PickleMod:22] </color>pickle: loaded\n';
+  const run = await fixture({ 'Player.log': decorated, 'container.log': 'exit 1\n' });
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  const { markdown } = decide(run);
+
+  assert.doesNotMatch(markdown, /Pickle never loaded/);
+});
+
+test('a bare boot line counts as loaded', async (t) => {
+  const run = await fixture({ 'Player.log': 'pickle: loaded\n', 'container.log': 'exit 1\n' });
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  assert.doesNotMatch(decide(run).markdown, /Pickle never loaded/);
+});
+
+test('a leg that reported keeps exit 1, so a comparison leg can absorb it', async (t) => {
+  const run = await fixture({
+    'summary.json': JSON.stringify({ total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, exitReason: 'failed' }),
+    'report.html': '<html></html>',
+    'container.log': 'exit 1\n',
+  });
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  assert.equal(decide(run).code, 1);
 });

@@ -14,9 +14,9 @@ const FILM_PREFIX = 'screenshots/film/';
 const MESSAGE_LIMIT = 300;
 const FAILURE_ROWS = 50;
 
-// The artifact is uploaded as compat-<set> while the films land under the bare name. Both halves
-// strip the prefix here, so nothing outside this file can aim the links at a folder that is empty.
-export const setNameFrom = (raw) => raw.replace(/^compat-/, '');
+// Legs upload as pickle-report-<leg> while the films land under the bare name. The fallback fires
+// on the failure paths, where a dead leg has no summary.json and the directory is its only name.
+export const setNameFrom = (raw) => raw.replace(/^(?:pickle-report|compat)-/, '');
 
 // BuildPayload escapes </ so a failure message cannot close the script tag it lives in.
 // JSON.parse decodes \/ on its own, so only the write side has to put it back.
@@ -119,8 +119,14 @@ export async function mergeReports(setsDir, out = 'merged.html') {
   }
 
   if (!template) {
+    // An artifact uploaded with more than one path keeps the common ancestor, so every report sits
+    // a level below where a leg is read and the run looks like it produced nothing.
+    const nested = sets.length > 0 && sets.every((set) => !set.counts);
+    const why = nested
+      ? '. No set had a summary.json either: check each suite artifact lists exactly one path, ending in a slash'
+      : '';
     // The rows are the only thing a reader gets without downloading, so they ride out on the error.
-    throw Object.assign(new Error('no set produced a report'), { sets });
+    throw Object.assign(new Error(`no set produced a report${why}`), { sets });
   }
 
   const merged = escape(JSON.stringify({ sets: sets.filter((set) => set.payload).map((set) => set.payload) }));

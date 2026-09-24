@@ -237,3 +237,38 @@ test('no missing-column line when the merge itself failed', () => {
 
   assert.doesNotMatch(summary, /Missing from Compare sets/);
 });
+
+test('every leg lacking a summary.json names the nested-artifact cause', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'merge-nested-'));
+  try {
+    // what a two-path upload produces: the report dir one level below where a leg is read
+    for (const leg of ['harmony', 'concord']) {
+      await mkdir(join(root, 'sets', leg, 'pickle-reports'), { recursive: true });
+      await writeFile(join(root, 'sets', leg, 'pickle-reports', 'report.html'), 'x');
+    }
+
+    await assert.rejects(
+      mergeReports(join(root, 'sets'), join(root, 'merged.html')),
+      /exactly one path, ending in a slash/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a leg with counts but no template does not blame the artifact shape', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'merge-nohint-'));
+  try {
+    await mkdir(join(root, 'sets', 'harmony'), { recursive: true });
+    await writeFile(join(root, 'sets', 'harmony', 'summary.json'), JSON.stringify(
+      { passed: 1, failed: 0, skipped: 0, flaky: 0, total: 1, exitReason: 'passed' },
+    ));
+
+    await assert.rejects(
+      mergeReports(join(root, 'sets'), join(root, 'merged.html')),
+      (err) => err.message === 'no set produced a report',
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

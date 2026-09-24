@@ -39,6 +39,7 @@ only in repos that publish to the Steam Workshop.
 | Workflow | `game-image` | Builds a RimWorld image from Steam and returns its ref |
 | Workflow | `links` | Checks markdown links with lychee |
 | Workflow | `node-build` | Builds a Node subproject and uploads its output |
+| Workflow | `pickle-suite` | Plays a Pickle suite against the game in a container |
 | Workflow | `prose` | Runs Vale on documentation |
 | Workflow | `ship-list` | Runs `verify-ship-list` against the caller |
 | Workflow | `sonar` | SonarCloud scan for a .NET mod |
@@ -46,6 +47,7 @@ only in repos that publish to the Steam Workshop.
 | Workflow | `test` | Installs Node and runs `npm test` |
 | Action | `discord-release` | Announces a release in Discord |
 | Action | `dotnet-sonar` | Build, analyzer gate, tests and coverage inside a Sonar scan |
+| Action | `stage-mods` | Stages a mod, its dependencies and the `ModsConfig` the game boots with |
 | Action | `steam-login` | Installs SteamCMD and restores a logged-in config |
 | Action | `steam-republish` | Pushes an already-built mod to its Workshop item |
 
@@ -263,6 +265,85 @@ the same repo usually needs them.
 
 `artifact-path` defaults to `dist`, relative to `working-directory`.
 
+### pickle-suite
+
+Plays a Pickle suite against a live game. The job builds the mod, stages it with the mods it
+depends on, runs the features in a container, and decides pass or fail from the report. Three
+repos kept near-identical copies of that script set and the copies drifted, which is the same
+failure the release plumbing here exists to stop.
+
+```yaml
+  suite:
+    uses: RimWorks/mod-ci/.github/workflows/pickle-suite.yml@v1
+    with:
+      mod-name: RimLogging
+      mod-package-id: rimworks.rimlogging
+      game-branch: version-1.6.4871
+    secrets:
+      STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+      STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+```
+
+| Input | Type | Default | What it does |
+|---|---|---|---|
+| `mod-name` | string | required | Mod name from `About.xml`, spaces included. Names the repo-root mount and is the default filter |
+| `mod-package-id` | string | required | Newline list of the caller's `packageId` values, written last in `ModsConfig.xml` |
+| `mod-dirs` | string | `''` | Newline list of `checkout-path:MountName`. Empty mounts the repo root as `mod-name` |
+| `game-image` | string | `''` | Image to pull and run. Empty builds one from `game-branch` |
+| `game-branch` | string | `''` | Steam branch the image job downloads, for example `version-1.6.4871` |
+| `game-version` | string | `'1.6'` | The `<version>` written into `ModsConfig.xml`. Not read from the image |
+| `backends` | string | `'["harmony"]'` | JSON array of `harmony`, `concord` or `both`. One matrix leg per entry |
+| `mod-sets` | string | `''` | JSON array of `{name, backend, extraMods}`. Replaces `backends`, and its legs report instead of gating |
+| `staged-mods` | string | `''` | Comma separated `owner/repo:AssetPrefix:packageId` of extra mods to download |
+| `pickle-version` | string | `''` | Pickle release to stage. Empty takes the latest, or pass a tag, `self` or `none` |
+| `suite-filter` | string | `''` | Value for `-pickle-run`. Empty falls back to `mod-name`, so a leg runs its own features |
+| `unfiltered` | boolean | `false` | Run every discovered feature with no filter. Only Pickle's own repo wants this |
+| `build-command` | string | `dotnet build -c Release` | Builds the mod before staging |
+| `build-artifacts` | string | `''` | Newline list of `name:path` artifacts to download before the build |
+| `dotnet-version` | string | `10.0.x` | Passed to `setup-dotnet`. Empty skips it, for a build that needs no SDK |
+| `platform` | string | `'linux'` | `linux` or `windows`. Read the Windows rule below |
+| `run-timeout` | number | `30` | Value for `-pickle-run-timeout`, minutes. Pickle's own watchdog |
+| `timeout-minutes` | number | `70` | The job timeout, the backstop for a wedged watchdog |
+| `retries` | number | `0` | Extra container attempts, for a dead X server only |
+| `film-seconds` | number | `0` | Value for `-pickle-max-film-seconds`. `0` skips the ffmpeg download |
+| `live-dashboard` | boolean | `false` | Exposes Pickle's dashboard over a tunnel while the suite runs |
+| `publish-report` | boolean | `false` | Pushes `report.html` to docbin |
+
+The one output, `report-artifact`, carries the artifact name back so a later job can download the
+merged report without repeating the string. A matrix cannot report counts as outputs, because a
+called workflow has one string slot per output name and every leg writes the same slot. The counts,
+and the message from each failed scenario, go to the job summary instead.
+
+**Secrets.** `DOCBIN_TOKEN` when `publish-report` is true. `STEAM_USERNAME` and
+`STEAM_CONFIG_VDF_B64` when `game-image` is empty, because the workflow then builds the image
+itself. `GITHUB_TOKEN` is not declared and does not need to be: a called workflow reads it without
+a declaration.
+
+Five rules, and each one is a failing step rather than a warning. A job skipped by an `if:`
+reports as skipped, and most branch protection reads a skipped required job as green.
+
+**Name the game image.** `game-image` and `game-branch` cannot both be empty: one names an image to
+pull, the other names a Steam branch to build one from. On Windows, `game-image` is required,
+because the image workflow here downloads the Linux depot and cannot produce a Windows ref.
+
+**Windows records nothing.** `platform: windows` refuses a non-zero `film-seconds` and
+`live-dashboard: true`. The Windows script publishes no port and mounts no ffmpeg, so an input it
+cannot honour fails the job instead of going quiet. It does read `suite-filter`.
+
+**Leave the job room for every attempt.** `(retries + 1) * run-timeout + 15 < timeout-minutes`,
+where the 15 minutes is a fixed allowance for checkout, the build, the image pull and staging.
+Raise `timeout-minutes`, or lower `run-timeout` or `retries`. When the watchdog trips first, Pickle
+writes a final report and the artifact uploads. When the job timeout trips first, the container
+dies mid-run and the report left on disk says `in-progress` with partial counts.
+
+**Keep `mod-dirs` mount names clear of the staged mods.** A mount named the same as a staged
+dependency's folder is replaced by that dependency, and the suite then passes against code the run
+never built.
+
+**Give every leg its own name.** A leg is named by its `backends` entry, or by the `name` of its
+`mod-sets` object, and each one uploads an artifact under that name. An empty name, or two legs
+sharing one, fails before the first container starts.
+
 ### prose
 
 Runs Vale and reports findings on the pull request. Pass `extra-command` to run one more check
@@ -460,6 +541,27 @@ Both list inputs take comma separated values, because one Cosmere release ships 
 Roshar together. Pass `workshop-id` as `Core=123, Scadrial=456` to label each link, and `role-ids`
 as a list when a release covers several notification roles. `allowed_mentions` lists only those
 roles, so a changelog that says `@everyone` cannot ping the server.
+
+### stage-mods
+
+Stages the mod under test, the mods it depends on, and the `ModsConfig.xml` the game boots with.
+Use it when a job drives the game itself: [Quickstarts][qs] runs a quickstart smoke test rather
+than a Pickle suite, so it needs the staging without the runner.
+
+```yaml
+      - uses: RimWorks/mod-ci/.github/actions/stage-mods@v1
+        with:
+          mods-dir: ${{ runner.temp }}/mods
+          config-dir: ${{ runner.temp }}/config
+          mod-name: Quickstarts
+          mod-package-id: rimworks.quickstarts
+          pickle-version: none
+```
+
+`pickle-version: none` stages no Pickle at all. Leave it empty to take the latest release, pass a
+release tag to pin one, or `self` when the checkout is Pickle. `mod-dirs` takes newline
+`checkout-path:MountName` pairs for a repo that ships several mods, and `mod-name` is the mount
+name when `mod-dirs` is empty. `backends` picks which patch backend gets staged.
 
 ## Development
 
