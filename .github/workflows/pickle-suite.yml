@@ -189,6 +189,13 @@ jobs:
           bad="$(jq -r '[.set[].backend | select(. != "harmony" and . != "concord" and . != "both")] | join(", ")' <<< "$matrix")"
           [[ -z "$bad" ]] || die "backend '$bad' is not harmony, concord or both"
 
+          # stage-mods.sh refuses these too, but only after the build and the image pull. a
+          # string-format error should not cost a container start.
+          malformed="$(jq -r '
+            [.set[] | .staged | select(. != "") | split(",")[]
+             | select((split(":") | length) != 3)] | join(", ")' <<< "$matrix")"
+          [[ -z "$malformed" ]] || die "staged mod '$malformed' is not owner/repo:AssetPrefix:packageId"
+
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "$matrix" | jq .
 
