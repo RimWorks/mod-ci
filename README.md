@@ -32,6 +32,7 @@ only in repos that publish to the Steam Workshop.
 | CLI | `package-mod` | Builds the release zip from `.steamignore` |
 | CLI | `verify-ship-list` | Checks a repo's release zip ships every mod content directory |
 | CLI | `discord-release` | Posts the release embed to a webhook |
+| Workflow | `assetbundles` | Builds Unity asset bundles and uploads one zip per mod |
 | Workflow | `codeql` | GitHub code scanning |
 | Workflow | `dependabot-automerge` | Merges patch and minor dependency updates |
 | Workflow | `dotnet-build` | Builds, tests, publishes results and checks formatting |
@@ -158,6 +159,37 @@ or has backticks in it. It exits `1` when `DISCORD_WEBHOOK_URL` is missing.
 ## Reusable workflows
 
 Call these from a consumer repo instead of copying them.
+
+### assetbundles
+
+Builds Unity asset bundles for every mod directory you name, then uploads one zip per mod. The
+Unity install takes about fifteen minutes, so the job caches the built bundles and skips the
+install on a hit.
+
+```yaml
+  assetbundles:
+    uses: RimWorks/mod-ci/.github/workflows/assetbundles.yml@v1
+    with:
+      mods: |
+        CosmereCore
+        CosmereRoshar
+        CosmereScadrial
+    secrets:
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+```
+
+`mods` is the only required input. The defaults assume the AssetBundleBuilder layout: an
+`.assetbundler.toml` per repo and per mod, a `make build-assets-all-verbose` target, and an
+`AssetBundles` directory inside each mod. Override `build-command`, `bundles-directory` or
+`cache-key-files` for a different layout.
+
+`cache-key-files` is the input to get right. It is a comma separated list of `hashFiles`
+patterns, and anything that changes a bundle has to appear in it. A pattern that misses a source
+file makes the job serve stale bundles.
+
+The output `artifact` carries the artifact name back, so a later job can download it without
+repeating the string.
 
 ### codeql
 

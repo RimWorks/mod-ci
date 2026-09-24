@@ -1,0 +1,192 @@
+name: asset bundles
+
+# Builds Unity asset bundles for every mod in a repo and uploads one zip per mod. A Unity
+# install costs about fifteen minutes, so the job caches the built bundles and skips the
+# install entirely on a hit. RimworldCosmere carried this verbatim before it moved here.
+
+on:
+  workflow_call:
+    inputs:
+      mods:
+        description: >
+          Newline separated mod directories to build bundles for, for example CosmereCore.
+          Each one is cached, archived and uploaded separately.
+        type: string
+        required: true
+      bundles-directory:
+        description: Directory inside each mod that the build writes bundles to.
+        type: string
+        default: AssetBundles
+      artifact-name:
+        description: Name the per-mod zips are uploaded under.
+        type: string
+        default: all-assetbundles
+      cache-key-files:
+        description: >
+          Comma separated hashFiles patterns. Anything that changes a bundle belongs here, or
+          the job serves a stale cache.
+        type: string
+        default: '.assetbundler.toml,*/.assetbundler.toml,scripts/build-assets.csx,Makefile,*/Assets/**'
+      build-command:
+        description: Command that builds bundles for every mod and platform.
+        type: string
+        default: make build-assets-all-verbose
+      pre-build-command:
+        description: >
+          Runs before the build, on a cache miss only. The default switches AssetBundleBuilder
+          from junction links to copies, which is the only mode that is reliable on a runner.
+        type: string
+        default: sed -i 's/link_method = "junction"/link_method = "copy"/' .assetbundler.toml
+      dotnet-version:
+        description: Passed to setup-dotnet. The bundle builder is a dotnet-script file.
+        type: string
+        default: '9.0.x'
+      install-dotnet-script:
+        description: Install the dotnet-script global tool. Turn it off for a non-csx builder.
+        type: boolean
+        default: true
+      unity-version:
+        description: Unity version to install. Match the version the assets were authored in.
+        type: string
+        default: 2022.3.35f1
+      unity-build-targets:
+        description: Space separated Unity build targets.
+        type: string
+        default: StandaloneWindows64 StandaloneOSX StandaloneLinux64
+      unity-modules:
+        description: Space separated Unity modules the build targets need.
+        type: string
+        default: windows-mono mac-mono linux-il2cpp
+      unity-license:
+        description: License type passed to activate-unity-license.
+        type: string
+        default: Personal
+    secrets:
+      UNITY_EMAIL:
+        required: true
+      UNITY_PASSWORD:
+        required: true
+    outputs:
+      artifact:
+        description: The artifact name holding one zip per mod.
+        value: ${{ inputs.artifact-name }}
+
+permissions:
+  contents: read
+
+jobs:
+  build-assetbundles:
+    name: build asset bundles
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve the bundle directories
+        id: paths
+        env:
+          MODS: ${{ inputs.mods }}
+          BUNDLES: ${{ inputs.bundles-directory }}
+        run: |
+          {
+            echo 'dirs<<EOF'
+            printf '%s\n' "$MODS" | tr -d '\r' | sed '/^[[:space:]]*$/d' | sed "s#[[:space:]]*\$#/$BUNDLES#"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore the bundle cache
+        id: assetbundle-cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.paths.outputs.dirs }}
+          key: ${{ runner.os }}-assetbundles-${{ hashFiles(inputs.cache-key-files) }}
+
+      - name: Setup .NET
+        if: steps.assetbundle-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Install dotnet-script
+        if: steps.assetbundle-cache.outputs.cache-hit != 'true' && inputs.install-dotnet-script
+        run: dotnet tool install --global dotnet-script
+
+      # hub 3.20.0 against unity-setup's pre-3.20 assumptions. the symlink must stay dangling
+      # or the action skips its own installer, and the shim drops an [install-state] line that
+      # breaks its strict `editors -i` parser. delete both on buildalon/unity-setup#57.
+      - name: Adapt Unity Hub 3.20.0 to what unity-setup expects
+        if: steps.assetbundle-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo ln -sfn /usr/lib/unityhub /opt/unityhub
+          sudo mkdir -p /opt/hub-shim
+          sudo tee /opt/hub-shim/unity-hub >/dev/null <<'SH'
+          #!/bin/bash
+          "${UNITY_HUB_REAL:-/usr/bin/unity-hub}" "$@" | grep -v --line-buffered '^\[install-state\]'
+          exit "${PIPESTATUS[0]}"
+          SH
+          sudo chmod 755 /opt/hub-shim/unity-hub
+          echo /opt/hub-shim >> "$GITHUB_PATH"
+
+          printf '#!/bin/bash\necho "[install-state] pruned 3 rows"\necho "2022.3.35f1 installed at /tmp/u"\nexit 4\n' > /tmp/fake-hub
+          chmod 755 /tmp/fake-hub
+          rc=0
+          out=$(UNITY_HUB_REAL=/tmp/fake-hub /opt/hub-shim/unity-hub) || rc=$?
+          [ "$rc" = 4 ] || { echo "shim dropped the hub exit code, got $rc"; exit 1; }
+          [ "$out" = "2022.3.35f1 installed at /tmp/u" ] || { echo "shim filtered wrong, got: $out"; exit 1; }
+          echo "shim self-test ok"
+
+      - name: Verify the shim is intercepting unity-hub
+        if: steps.assetbundle-cache.outputs.cache-hit != 'true'
+        run: |
+          resolved=$(command -v unity-hub || true)
+          [ "$resolved" = /opt/hub-shim/unity-hub ] || { echo "PATH resolved unity-hub to '$resolved'"; exit 1; }
+
+      - uses: buildalon/unity-setup@v1
+        if: steps.assetbundle-cache.outputs.cache-hit != 'true'
+        with:
+          unity-version: ${{ inputs.unity-version }}
+          build-targets: ${{ inputs.unity-build-targets }}
+          modules: ${{ inputs.unity-modules }}
+          cache-installation: 'true'
+          auto-update-hub: 'false'
+
+      - uses: buildalon/activate-unity-license@v1
+        if: steps.assetbundle-cache.outputs.cache-hit != 'true'
+        with:
+          license: ${{ inputs.unity-license }}
+          username: ${{ secrets.UNITY_EMAIL }}
+          password: ${{ secrets.UNITY_PASSWORD }}
+
+      - name: Prepare the builder for CI
+        if: steps.assetbundle-cache.outputs.cache-hit != 'true' && inputs.pre-build-command != ''
+        run: ${{ inputs.pre-build-command }}
+
+      - name: Build the asset bundles
+        if: steps.assetbundle-cache.outputs.cache-hit != 'true'
+        run: ${{ inputs.build-command }}
+
+      - name: Archive the bundles
+        env:
+          MODS: ${{ inputs.mods }}
+          BUNDLES: ${{ inputs.bundles-directory }}
+        run: |
+          found=0
+          while read -r mod; do
+            [ -n "$mod" ] || continue
+            if [ ! -d "$mod/$BUNDLES" ]; then
+              echo "no $BUNDLES in $mod, skipping"
+              continue
+            fi
+            echo "archiving $mod"
+            (cd "$mod" && zip -qr "$GITHUB_WORKSPACE/${mod##*/}-assetbundles.zip" "$BUNDLES")
+            found=$((found + 1))
+          done <<< "$(printf '%s\n' "$MODS" | tr -d '\r')"
+          [ "$found" -gt 0 ] || { echo "no mod produced a $BUNDLES directory"; exit 1; }
+
+      - name: Upload the bundles
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact-name }}
+          if-no-files-found: error
+          path: '*-assetbundles.zip'
