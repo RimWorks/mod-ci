@@ -8,6 +8,11 @@ import { decide } from '../.github/actions/pickle-run/verdict.mjs';
 
 const XIO = 'XIO:  fatal IO error 11 (Resource temporarily unavailable) on X server ":99"';
 
+// pickle rewrites report.html on an interval, so a container killed mid-write leaves one of these:
+// cut before the closing tag, or cut inside the json with the tag still there.
+const CUT_OFF = '<html><script id="pickle-report" type="application/json">{"features":[{"name":"load';
+const CUT_JSON = '<html><script id="pickle-report" type="application/json">{"features":[{</script></html>';
+
 function html(payload) {
   const json = JSON.stringify(payload).replace(/<\//g, '<\\/');
   return `<html><script id="pickle-report" type="application/json">${json}</script></html>`;
@@ -84,6 +89,38 @@ test('fails without a retry when nothing reported and no X message', async (t) =
   assert.match(markdown, /oom killed/);
 });
 
+test('a missing container log is reported, not read as "no X death"', async (t) => {
+  const run = await fixture({});
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  const { code, markdown, notices } = decide(run);
+
+  assert.equal(code, 1);
+  assert.match(markdown, /No container log to grep/);
+  assert.match(markdown, /ran blind/);
+  assert.match(notices[0], /^::error title=Pickle container log missing::/);
+});
+
+test('an empty container log counts as unread, not as a clean grep', async (t) => {
+  const run = await fixture({ 'container.log': '' });
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  const { code, markdown } = decide(run);
+
+  assert.equal(code, 1);
+  assert.match(markdown, /ran blind/);
+});
+
+test('the X pattern tolerates the two spaces xlib actually writes', async (t) => {
+  // a literal one-space pattern matches nothing in a real log and turns every retry off silently
+  assert.ok(!/XIO: fatal IO error/.test(XIO));
+
+  const run = await fixture({ 'Player.log': `${XIO}\n`, 'container.log': 'boot\n' });
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  assert.equal(decide(run).code, 75);
+});
+
 test('a scenario failure never reaches a retry, even with an X death in the log', async (t) => {
   const run = await fixture({
     'summary.json': { total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, exitReason: 'failed' },
@@ -110,6 +147,32 @@ test('names the failing step and its message in the table', async (t) => {
   assert.equal(code, 1);
   assert.match(markdown, /7 of 73 scenarios failed/);
   assert.match(markdown, /\| spike\.feature \| Cosmere - Core \| spawns a spike \| Then the mod loads \| Could not load/);
+});
+
+test('a green run with an unreadable report.html passes, but never silently', async (t) => {
+  const run = await fixture({ 'summary.json': passing, 'report.html': CUT_OFF });
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  const { code, markdown, notices } = decide(run);
+
+  assert.equal(code, 0);
+  assert.match(markdown, /All 3 scenarios passed/);
+  assert.match(markdown, /No failure table: report\.html carries no pickle-report payload/);
+  assert.match(notices[0], /^::warning title=Pickle report\.html unreadable::/);
+});
+
+test('an unreadable report.html still fails a run with failures, and says why there is no table', async (t) => {
+  const run = await fixture({
+    'summary.json': { total: 5, passed: 3, failed: 2, skipped: 0, flaky: 0, exitReason: 'failed' },
+    'report.html': CUT_JSON,
+  });
+  t.after(() => rm(run.dir, { recursive: true, force: true }));
+
+  const { code, markdown } = decide(run);
+
+  assert.equal(code, 1);
+  assert.match(markdown, /2 of 5 scenarios failed/);
+  assert.match(markdown, /No failure table: report\.html payload is not readable/);
 });
 
 test('fails when the report write threw before report.html', async (t) => {

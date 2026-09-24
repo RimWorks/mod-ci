@@ -67,11 +67,17 @@ function tail(path, count) {
   return text.split('\n').filter(Boolean).slice(-count).join('\n');
 }
 
-function xServerDied(paths) {
-  return paths.some((path) => {
+// A log we could not read greps the same as a clean one, and a blind grep reads as "no X death"
+// and burns the only retry there is. So report what was unreadable alongside the answer.
+function xServerScan(paths) {
+  let died = false;
+  const unreadable = [];
+  for (const path of paths) {
     const text = read(path);
-    return text != null && X_SERVER_DIED.test(text);
-  });
+    if (text === null || text.trim() === '') unreadable.push(String(path));
+    else if (X_SERVER_DIED.test(text)) died = true;
+  }
+  return { died, unreadable };
 }
 
 // ScenarioFilter.DescribeNoMatch lists every discovered feature grouped by mod plus the legal
@@ -140,7 +146,8 @@ export function decide({ dir, status = 0, stamp, containerLog } = {}) {
   // 2. the last point a retry is possible. Everything below had a report to read.
   const summaryMs = mtime(summaryPath);
   if (summaryMs === null || summaryMs <= stampMs) {
-    if (xServerDied([playerLog, containerLog])) {
+    const scan = xServerScan([playerLog, containerLog]);
+    if (scan.died) {
       return done(EXIT_RETRY, [
         '**The X server died before the suite reported.** That is a flake, worth one retry.',
         '',
@@ -148,15 +155,31 @@ export function decide({ dir, status = 0, stamp, containerLog } = {}) {
       ]);
     }
 
+    const blind = containerLog == null || scan.unreadable.includes(String(containerLog));
     const lines = [
       '**This run never reported.**',
       '',
       `No summary.json under \`${dir}\` newer than the stamp, and nothing in Player.log or the`,
       `container log says the X server died. Container exit ${status}.`,
     ];
+    const notices = [];
+    if (blind) {
+      // run-suite.sh writes the container's stdout to $RUNNER_TEMP/container.log and never copies
+      // it into the report dir, so a caller that does not pass the real path checks nothing.
+      const where = containerLog == null ? '(no path given)' : `\`${containerLog}\``;
+      lines.push(
+        '',
+        `**No container log to grep at ${where}.** The X-server check ran blind, so a dead X`,
+        'server would read as a real failure and never retry. Pass the path run-suite.sh wrote to.',
+      );
+      notices.push(
+        '::error title=Pickle container log missing::' +
+          `nothing to read at ${containerLog ?? '(no path given)'}; the X-server retry check was blind`,
+      );
+    }
     const last = tail(containerLog, 20);
     if (last) lines.push('', 'Last 20 lines of the container log:', '', '```', last, '```');
-    return done(EXIT_FAIL, lines);
+    return done(EXIT_FAIL, lines, notices);
   }
 
   // 3. the suite reported, so no path below can retry and a failed scenario never sees a 75.
@@ -228,7 +251,14 @@ export function decide({ dir, status = 0, stamp, containerLog } = {}) {
   lines.push(...detail);
 
   const failures = payload ? failuresFrom(payload) : [];
-  if (payloadError && failed > 0) lines.push('', `No failure table: ${payloadError}`);
+  // summary.json is the verdict, so an unreadable payload never gates. it still gets said out loud
+  // on a green run: a killed container leaves a half-written report.html and nothing else shows it.
+  if (payloadError) {
+    lines.push('', `No failure table: ${payloadError}`);
+    // %0A because a JSON.parse message can carry the newline it choked on, which would cut the
+    // annotation short and spill the rest as plain stdout.
+    notices.push(`::warning title=Pickle report.html unreadable::${payloadError.replace(/\r?\n/g, '%0A')}`);
+  }
 
   // WriteReports rewrites every file on an interval, so a container killed between writes leaves
   // an html payload older than summary.json and short of the last failures.
@@ -252,8 +282,11 @@ export function decide({ dir, status = 0, stamp, containerLog } = {}) {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dir = process.argv[2] || process.env.REPORT_DIR;
   const stamp = process.argv[4] || process.env.STAMP_FILE;
-  if (!dir || !stamp) {
-    process.stderr.write('usage: verdict.mjs <report-dir> [status] [stamp] [container-log]\n');
+  // no default for the container log: the old join(dir, 'container.log') pointed at a path nothing
+  // writes, so the retry grep read an empty string and every X death failed instead of retrying.
+  const containerLog = process.argv[5] || process.env.CONTAINER_LOG;
+  if (!dir || !stamp || !containerLog) {
+    process.stderr.write('usage: verdict.mjs <report-dir> <status> <stamp> <container-log>\n');
     process.exit(EXIT_FAIL);
   }
 
@@ -261,7 +294,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     dir,
     status: Number(process.argv[3] || process.env.RUN_STATUS || 0),
     stamp,
-    containerLog: process.argv[5] || process.env.CONTAINER_LOG || join(dir, 'container.log'),
+    containerLog,
   });
 
   for (const notice of notices) process.stdout.write(`${notice}\n`);

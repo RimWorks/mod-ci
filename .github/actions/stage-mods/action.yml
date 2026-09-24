@@ -1,0 +1,49 @@
+name: stage mods
+description: Stage a mod under test, the mods it depends on, and the ModsConfig the game boots with.
+
+inputs:
+  backends:
+    description: Patch backend to stage, one of harmony, concord or both
+    default: harmony
+  mods-dir:
+    description: Directory the game loads mods from
+    required: true
+  config-dir:
+    description: Directory ModsConfig.xml and Prefs.xml are written to
+    required: true
+  mod-package-id:
+    description: Newline list of the caller's packageIds, loaded last
+    required: true
+  mod-dirs:
+    description: "Newline list of checkout-path:MountName. Empty uses the repo root under mod-name"
+    default: ''
+  mod-name:
+    description: Folder the repo root mounts as when mod-dirs is empty
+    default: ''
+  game-version:
+    description: Value for <version> in ModsConfig.xml
+    default: '1.6'
+  staged-mods:
+    description: "Comma separated owner/repo:AssetPrefix:packageId to stage from their latest release"
+    default: ''
+  pickle-version:
+    description: "self, empty to float to the latest release, a release tag, or none to leave Pickle out"
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Stage mods
+      shell: bash
+      env:
+        MOD_DIRS: ${{ inputs.mod-dirs }}
+        MOD_NAME: ${{ inputs.mod-name }}
+        MOD_PACKAGE_ID: ${{ inputs.mod-package-id }}
+        GAME_VERSION: ${{ inputs.game-version }}
+        STAGED_MODS: ${{ inputs.staged-mods }}
+        PICKLE_VERSION: ${{ inputs.pickle-version }}
+        # anonymous github api is 60 calls an hour, shared across everything on the runner
+        GITHUB_TOKEN: ${{ github.token }}
+      run: >
+        "${{ github.action_path }}/stage-mods.sh"
+        "${{ inputs.backends }}" "${{ inputs.mods-dir }}" "${{ inputs.config-dir }}"

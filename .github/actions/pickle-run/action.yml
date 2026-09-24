@@ -1,0 +1,203 @@
+name: pickle run
+description: Stage a RimWorld mod and its dependencies, play one Pickle suite leg in a container, and decide pass, fail or retry.
+
+inputs:
+  game-image:
+    description: Image ref to pull and run, for example a ghcr rimworld image
+    required: true
+  mod-name:
+    description: Mod name from About.xml, spaces included. Names the repo-root mount and is the default suite filter
+    required: true
+  mod-package-id:
+    description: Newline list of the caller's packageIds, written last in ModsConfig.xml
+    required: true
+  mod-dirs:
+    description: "Newline list of checkout-path:MountName. Empty mounts the repo root as mod-name"
+    default: ''
+  backend:
+    description: Patch backend for this leg - harmony, concord or both
+    default: harmony
+  game-version:
+    description: "<version> written into ModsConfig.xml. Not derived from the image, so a 1.6 image can test a 1.7 modlist"
+    default: '1.6'
+  staged-mods:
+    description: "Comma separated owner/repo:AssetPrefix:packageId of extra mods to download"
+    default: ''
+  pickle-version:
+    description: "Pickle release to stage: 'self' when the checkout is Pickle, empty to float to latest, a release tag, or 'none'"
+    default: ''
+  suite-filter:
+    description: Value for -pickle-run. Empty falls back to mod-name, so a leg runs its own features rather than every loaded mod's
+    default: ''
+  unfiltered:
+    description: Run every discovered feature with no -pickle-run= term. Only Pickle's own repo wants this
+    default: 'false'
+  set-name:
+    description: Value for -pickle-set-name. Match the artifact folder with any compat- prefix stripped, or the merged report's film links 404
+    default: ''
+  platform:
+    description: linux or windows
+    default: linux
+  film-seconds:
+    description: Value for -pickle-max-film-seconds. 0 skips the ffmpeg download
+    default: '0'
+  live-dashboard:
+    description: Expose Pickle's dashboard over a cloudflared tunnel while the suite runs
+    default: 'false'
+  leg-index:
+    description: Position of this leg in the caller's matrix. Offsets the dashboard port so two legs cannot collide
+    default: '0'
+  run-timeout:
+    description: Value for -pickle-run-timeout, minutes. Pickle's own watchdog, and it has to trip before the job timeout
+    default: '30'
+  timeout-minutes:
+    description: The timeout-minutes the calling job carries. Checked against run-timeout and retries, never applied here
+    default: '70'
+  retries:
+    description: Extra container attempts for a dead X server only
+    default: '0'
+  report-dir:
+    description: Where the container writes summary.json, report.html, junit.xml and Player.log
+    default: ${{ github.workspace }}/pickle-reports
+
+outputs:
+  report-dir:
+    description: Directory the caller uploads as its artifact
+    value: ${{ inputs.report-dir }}
+
+runs:
+  using: composite
+  steps:
+    # a refusal is a failing step, never an `if:` that skips it. branch protection reads a
+    # skipped required job as green.
+    - name: Check the inputs
+      shell: bash
+      env:
+        PLATFORM: ${{ inputs.platform }}
+        FILM_SECONDS: ${{ inputs.film-seconds }}
+        LIVE_DASHBOARD: ${{ inputs.live-dashboard }}
+        RUN_TIMEOUT: ${{ inputs.run-timeout }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        RETRIES: ${{ inputs.retries }}
+        LEG_INDEX: ${{ inputs.leg-index }}
+      run: |
+        set -euo pipefail
+
+        # cosmere's ci.yml:106-108 budgets 15 minutes around PICKLE_RUN_TIMEOUT for checkout,
+        # build, the ghcr pull and staging, and ci.yml:176 is the 45-vs-15 pair it shipped.
+        OVERHEAD_MINUTES=15
+
+        die() { printf 'error: %s\n' "$@" >&2; exit 1; }
+
+        for pair in "run-timeout=$RUN_TIMEOUT" "timeout-minutes=$TIMEOUT_MINUTES" \
+                    "retries=$RETRIES" "leg-index=$LEG_INDEX"; do
+          # a GitHub number input arrives as a string, so a typo reaches the arithmetic intact
+          # and $((x + abc)) quietly reads abc as zero.
+          [[ "${pair#*=}" =~ ^[0-9]+$ ]] ||
+            die "${pair%%=*} is '${pair#*=}', which is not a whole number"
+        done
+
+        [[ "$PLATFORM" == linux || "$PLATFORM" == windows ]] ||
+          die "platform is '$PLATFORM', which is not linux or windows"
+
+        if [[ "$PLATFORM" == windows ]]; then
+          [[ "$FILM_SECONDS" == 0 ]] ||
+            die "platform is 'windows' and film-seconds is '$FILM_SECONDS'." \
+                "run-suite-windows.sh hardcodes -pickle-max-film-seconds=0, and the ffmpeg it would mount is a linux binary."
+
+          [[ "$LIVE_DASHBOARD" != true ]] ||
+            die "platform is 'windows' and live-dashboard is '$LIVE_DASHBOARD'." \
+                "run-suite-windows.sh publishes no port and never starts the tunnel."
+        fi
+
+        # every attempt has to finish inside the job timeout, or GitHub kills the container
+        # mid-run and the only summary.json left says in-progress.
+        needed=$(( (RETRIES + 1) * RUN_TIMEOUT + OVERHEAD_MINUTES ))
+        (( needed < TIMEOUT_MINUTES )) ||
+          die "timeout-minutes is '$TIMEOUT_MINUTES', and this leg needs more than that." \
+              "(retries $RETRIES + 1) * run-timeout $RUN_TIMEOUT + $OVERHEAD_MINUTES minutes for checkout, build, the image pull and staging = $needed." \
+              "raise timeout-minutes above $needed, or lower run-timeout or retries."
+
+    # the composite reads github.token directly; the secrets context is not available here
+    - name: Log in to ghcr
+      shell: bash
+      env:
+        GAME_IMAGE: ${{ inputs.game-image }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        case "$GAME_IMAGE" in
+          ghcr.io/*) echo "$GITHUB_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin ;;
+          *) echo "not a ghcr image, skipping the login" ;;
+        esac
+
+    # stage-mods.sh lives one directory over so a staging-only consumer can use it without the runner
+    - name: Stage the mods and config
+      shell: bash
+      env:
+        MOD_DIRS: ${{ inputs.mod-dirs }}
+        MOD_NAME: ${{ inputs.mod-name }}
+        MOD_PACKAGE_ID: ${{ inputs.mod-package-id }}
+        GAME_VERSION: ${{ inputs.game-version }}
+        STAGED_MODS: ${{ inputs.staged-mods }}
+        PICKLE_VERSION: ${{ inputs.pickle-version }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        "${{ github.action_path }}/../stage-mods/stage-mods.sh" \
+          "${{ inputs.backend }}" "$RUNNER_TEMP/mods" "$RUNNER_TEMP/config"
+
+    - name: Run the suite and judge it
+      shell: bash
+      env:
+        GAME_IMAGE: ${{ inputs.game-image }}
+        PLATFORM: ${{ inputs.platform }}
+        REPORT_DIR: ${{ inputs.report-dir }}
+        RETRIES: ${{ inputs.retries }}
+        SUITE_FILTER: ${{ inputs.suite-filter }}
+        MOD_NAME: ${{ inputs.mod-name }}
+        UNFILTERED: ${{ inputs.unfiltered }}
+        FILM_SECONDS: ${{ inputs.film-seconds }}
+        LIVE_DASHBOARD: ${{ inputs.live-dashboard }}
+        LEG_INDEX: ${{ inputs.leg-index }}
+        SET_NAME: ${{ inputs.set-name }}
+        RUN_TIMEOUT: ${{ inputs.run-timeout }}
+      run: |
+        set -euo pipefail
+
+        # GHA cannot default one input to another, so an empty filter resolves here. an
+        # unfiltered run also plays every other loaded mod's features.
+        if [[ -z "$SUITE_FILTER" && "$UNFILTERED" != true ]]; then
+          SUITE_FILTER="$MOD_NAME"
+        fi
+        export SUITE_FILTER
+
+        # one tunnel binds one port, so legs offset off the base rather than collide
+        export DASHBOARD_PORT=$(( 27750 + LEG_INDEX ))
+
+        runner="${{ github.action_path }}/run-suite.sh"
+        [[ "$PLATFORM" == linux ]] || runner="${{ github.action_path }}/run-suite-windows.sh"
+
+        # both runners capture the container's stdout here, and the X-server retry grep reads it.
+        # verdict.mjs has no default for it, so this path is not optional.
+        container_log="$RUNNER_TEMP/container.log"
+
+        attempts=$(( RETRIES + 1 ))
+        for attempt in $(seq 1 "$attempts"); do
+          echo "::group::pickle suite attempt $attempt of $attempts"
+          # the stamp is the only way the verdict tells this attempt's report from the last one
+          stamp="$(mktemp)"
+          status=0
+          "$runner" "$GAME_IMAGE" "$RUNNER_TEMP/mods" "$RUNNER_TEMP/config" "$REPORT_DIR" || status=$?
+          echo "::endgroup::"
+
+          verdict=0
+          node "${{ github.action_path }}/verdict.mjs" \
+            "$REPORT_DIR" "$status" "$stamp" "$container_log" || verdict=$?
+
+          # 75 is the one retryable verdict: no report at all plus a dead X server. everything
+          # past that check had a report to read, so a failed scenario can never land here.
+          [[ "$verdict" == 75 ]] || exit "$verdict"
+        done
+
+        echo "::error title=Pickle suite::the X server died on all $attempts attempt(s)"
+        exit 1

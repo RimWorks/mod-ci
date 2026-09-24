@@ -15,6 +15,7 @@ MOD_NAME="${MOD_NAME:-}"
 MOD_PACKAGE_ID="${MOD_PACKAGE_ID:?the packageId of the mod under test, one per line}"
 GAME_VERSION="${GAME_VERSION:-1.6}"
 STAGED_MODS="${STAGED_MODS:-}"
+# 'self', empty to float to the latest release, a release tag, or 'none' to leave pickle out.
 PICKLE_VERSION="${PICKLE_VERSION:-}"
 
 PICKLE_REPO="RimWorks/Rimworld-Pickle"
@@ -76,6 +77,33 @@ if [[ -n "$STAGED_MODS" ]]; then
     staged_ids+=("$package_id")
   done
 fi
+
+# stage_release_zip rm -rf's its destination, so a mount sharing a name with one is copied in and
+# then replaced by the dependency. The job stays green and the suite runs against the wrong code.
+reserved_names=()
+reserved_owners=()
+reserve() {
+  reserved_names+=("$1")
+  reserved_owners+=("$2")
+}
+
+[[ "$BACKENDS" == "harmony" ]] || reserve Concord "the Concord patch backend"
+[[ "$BACKENDS" == "concord" ]] || reserve Harmony "the Harmony patch backend"
+reserve RimLogging "the RimLogging framework"
+[[ "$PICKLE_VERSION" == "self" || "$PICKLE_VERSION" == "none" ]] ||
+  reserve Pickle "Pickle (PICKLE_VERSION '${PICKLE_VERSION:-latest}')"
+
+for i in "${!staged_repos[@]}"; do
+  reserve "${staged_repos[$i]##*/}" "the staged mod '${staged_repos[$i]}'"
+done
+
+for i in "${!mod_mounts[@]}"; do
+  for j in "${!reserved_names[@]}"; do
+    [[ "${mod_mounts[$i]}" == "${reserved_names[$j]}" ]] || continue
+    die "mod dir '${mod_srcs[$i]}:${mod_mounts[$i]}' mounts as '${mod_mounts[$i]}', but" \
+        "${reserved_owners[$j]} is staged into that folder and would replace it"
+  done
+done
 
 mkdir -p "$MODS_DIR" "$CONFIG_DIR"
 
@@ -175,7 +203,8 @@ for i in "${!staged_repos[@]}"; do
 done
 
 # 'self' means the checkout is pickle, so mod-dirs mounts it and mod-package-id names it.
-if [[ "$PICKLE_VERSION" != "self" ]]; then
+# 'none' is a staging-only consumer that runs no suite, so nothing loads pickle at all.
+if [[ "$PICKLE_VERSION" != "self" && "$PICKLE_VERSION" != "none" ]]; then
   pickle_ref="latest"
   [[ -z "$PICKLE_VERSION" ]] || pickle_ref="tags/$PICKLE_VERSION"
   stage_release_zip "$PICKLE_REPO" "Pickle-" "$MODS_DIR/Pickle" "$pickle_ref"

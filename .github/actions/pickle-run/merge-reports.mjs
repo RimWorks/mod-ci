@@ -91,9 +91,19 @@ export async function mergeReports(setsDir, out = 'merged.html') {
     }
 
     const html = await readFile(reportPath, 'utf8');
-    template ??= html;
 
-    const payload = readPayload(html);
+    // Pickle rewrites report.html on an interval, so a killed leg leaves a half-written one. That
+    // leg loses its own payload and nothing else: every other leg still has to reach the summary.
+    let payload;
+    try {
+      payload = readPayload(html);
+    } catch (err) {
+      sets.push({ name: setNameFrom(counts?.setName || dir), counts, failures: [], unreadable: err.message });
+      continue;
+    }
+
+    // Only a leg that parsed can be the template, or the merged file inherits the truncation.
+    template ??= html;
     const name = setNameFrom(payload.setName || dir);
     payload.setName = name;
     prefixFilmPaths(payload, name);
@@ -109,7 +119,8 @@ export async function mergeReports(setsDir, out = 'merged.html') {
   }
 
   if (!template) {
-    throw new Error('no set produced a report');
+    // The rows are the only thing a reader gets without downloading, so they ride out on the error.
+    throw Object.assign(new Error('no set produced a report'), { sets });
   }
 
   const merged = escape(JSON.stringify({ sets: sets.filter((set) => set.payload).map((set) => set.payload) }));
@@ -126,19 +137,24 @@ function cell(text) {
   return cut.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('|', '\\|');
 }
 
-function result({ counts }) {
-  if (!counts) {
-    return 'no summary.json, this set never reported';
-  }
-
+function counted(counts) {
   const flaky = counts.flaky > 0 ? `, ${counts.flaky} flaky` : '';
   return `${counts.passed} passed, ${counts.failed} failed, ${counts.skipped} skipped${flaky} (${counts.exitReason})`;
 }
 
-export function stepSummary(sets) {
+function result({ counts, unreadable }) {
+  const line = counts ? counted(counts) : 'no summary.json, this set never reported';
+  return unreadable ? `${line}; report.html unreadable: ${cell(unreadable)}` : line;
+}
+
+export function stepSummary(sets, problem) {
   const lines = ['## Pickle sets', '', '| Set | Result |', '|---|---|'];
   for (const set of sets) {
     lines.push(`| ${cell(set.name)} | ${result(set)} |`);
+  }
+
+  if (sets.length === 0) {
+    lines.push('| - | no set uploaded anything to merge |');
   }
 
   // Counts alone send a reader off to download an artifact to learn what broke.
@@ -154,7 +170,17 @@ export function stepSummary(sets) {
     }
   }
 
-  lines.push('', 'Download **merged-report** below and open `merged.html`. Select **Compare sets** to see which scenario broke under which set.');
+  // An unreadable set has no payload to splice, so it is a row here and a missing column in
+  // Compare sets. Say so, or the next person files a bug against the dashboard.
+  const absent = sets.filter((set) => set.unreadable).map((set) => set.name);
+  if (absent.length > 0 && !problem) {
+    lines.push('', `Missing from Compare sets: ${absent.map(cell).join(', ')}. An unreadable report.html has no data to merge.`);
+  }
+
+  // No merged.html exists when the merge itself failed, so do not send the reader to open one.
+  lines.push('', problem
+    ? `The merge failed: ${cell(problem)}. The rows above are everything this run reported.`
+    : 'Download **merged-report** below and open `merged.html`. Select **Compare sets** to see which scenario broke under which set.');
   return `${lines.join('\n')}\n`;
 }
 
@@ -164,18 +190,25 @@ async function main([setsDir, out = 'merged.html']) {
     return 2;
   }
 
-  let sets;
+  let sets = [];
+  let problem = null;
   try {
     sets = await mergeReports(setsDir, out);
   } catch (err) {
+    problem = err.message;
+    sets = err.sets ?? [];
     console.error(`::error title=Pickle merge::${err.message}`);
-    return 1;
   }
 
-  const summary = stepSummary(sets);
+  // A failed merge still owes the reader its counts, or they download artifacts to learn nothing ran.
+  const summary = stepSummary(sets, problem);
   await (process.env.GITHUB_STEP_SUMMARY
     ? appendFile(process.env.GITHUB_STEP_SUMMARY, summary, 'utf8')
     : process.stdout.write(summary));
+
+  if (problem) {
+    return 1;
+  }
 
   console.log(`merge-reports: ${sets.length} set(s) -> ${out}`);
   return 0;

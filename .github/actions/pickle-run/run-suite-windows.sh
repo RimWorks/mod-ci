@@ -14,6 +14,11 @@ RUN_TIMEOUT="${RUN_TIMEOUT:-}"
 
 TMP="${RUNNER_TEMP:-/tmp}"
 
+# PickleArgs.IntArg drops a value int.TryParse refuses and keeps its own 60, so an unchecked
+# typo leaves the watchdog above the job timeout
+[[ -z "$RUN_TIMEOUT" || "$RUN_TIMEOUT" =~ ^[0-9]+$ ]] ||
+  { echo "error: RUN_TIMEOUT is '$RUN_TIMEOUT', not a whole number" >&2; exit 1; }
+
 # a mistyped mod directory reads as a missing def three minutes later, so name it now
 for src in "$MODS_DIR" "$CONFIG_DIR"; do
   [[ -d "$src" ]] || { echo "error: no directory at $src" >&2; exit 1; }
@@ -48,9 +53,11 @@ if [[ -n "$RUN_TIMEOUT" ]]; then
 fi
 
 : > "$TMP/container.log"
+# GenFilePaths.ConfigFolderPath is savedatafolder plus Config, so CONFIG_DIR is the Config dir
+# itself here as it is on linux, and one staged directory feeds both platforms
 docker run --rm --name pickle-suite-win \
   -v "$MODS_DIR:/game/Mods:ro" \
-  -v "$CONFIG_DIR:/config" \
+  -v "$CONFIG_DIR:/config/Config" \
   -v "$REPORT_DIR:/out" \
   "$IMAGE" \
   run-headless-windows 'Z:\game\RimWorldWin64.exe' \

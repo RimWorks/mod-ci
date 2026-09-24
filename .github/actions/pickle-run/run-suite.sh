@@ -20,6 +20,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="${RUNNER_TEMP:-/tmp}"
 CFG="/home/app/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config"
 
+# PickleArgs.IntArg drops a value int.TryParse refuses and keeps its own 60, so an unchecked
+# typo films every scenario or leaves the watchdog above the job timeout
+for var in FILM_SECONDS RUN_TIMEOUT; do
+  [[ -z "${!var}" || "${!var}" =~ ^[0-9]+$ ]] ||
+    { echo "error: $var is '${!var}', not a whole number" >&2; exit 1; }
+done
+
 # a mistyped mod directory reads as a missing def three minutes later, so name it now
 for src in "$MODS_DIR" "$CONFIG_DIR"; do
   [[ -d "$src" ]] || { echo "error: no directory at $src" >&2; exit 1; }
