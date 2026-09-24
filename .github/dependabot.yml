@@ -12,14 +12,6 @@ updates:
     commit-message:
       # chore is absent from releaseRules, so a CI-only bump does not cut a release
       prefix: "chore(deps)"
-    ignore:
-      # actions are pinned to a major tag, so the tag already tracks patch and minor fixes.
-      # a major bump is a real decision and still opens a PR.
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-patch"
-          - "version-update:semver-minor"
-
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
