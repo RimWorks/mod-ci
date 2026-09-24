@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { decide } from '../.github/actions/pickle-run/verdict.mjs';
+import { CHECK_ORDER, decide } from '../.github/actions/pickle-run/verdict.mjs';
 
 const XIO = 'XIO:  fatal IO error 11 (Resource temporarily unavailable) on X server ":99"';
 
@@ -339,4 +340,30 @@ test('a leg that reported keeps exit 1, so a comparison leg can absorb it', asyn
   t.after(() => rm(run.dir, { recursive: true, force: true }));
 
   assert.equal(decide(run).code, 1);
+});
+
+
+// the nine checks are a list now, so nothing but this stops a reorder
+test('the nine checks keep their order and their numbers', () => {
+  assert.deepEqual(CHECK_ORDER, [
+    '1:no-stamp',
+    '2:never-reported',
+    '3:unreadable-summary',
+    '4:report-write-threw',
+    '5:zero-scenarios',
+    '6:scenarios-failed',
+    '7:did-not-finish',
+    '8:passed',
+  ]);
+});
+
+test('only the first three checks can reach a retry', () => {
+  const src = readFileSync(
+    join(import.meta.dirname, '..', '.github', 'actions', 'pickle-run', 'verdict.mjs'),
+    'utf8',
+  );
+  const verdicts = src.slice(src.indexOf('const VERDICTS = ['), src.indexOf('function judgeNoReport'));
+
+  assert.ok(!verdicts.includes('EXIT_RETRY'), 'a VERDICTS entry can retry, so a failed scenario could loop');
+  assert.ok(!verdicts.includes('75'), 'a VERDICTS entry returns 75 literally');
 });

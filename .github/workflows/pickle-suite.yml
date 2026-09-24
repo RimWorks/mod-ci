@@ -320,9 +320,8 @@ jobs:
             echo "docbin upload did not return a url: $out"
           fi
 
-      # always: a failed leg's Player.log is the only place its cause is written down.
-      # one path, trailing slash: merge-reports.mjs reads a leg as <artifact>/report.html, and a
-      # second path here would make GHA keep the common ancestor and nest every report a level down.
+      # one path, trailing slash: a second path makes GHA keep the common ancestor, and
+      # merge-reports.mjs then reads no leg at all
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -3,7 +3,7 @@
 // Counts come from summary.json; step text and failure messages come from the payload inside
 // report.html, the only report file carrying either.
 // argv first, then env: <report-dir> REPORT_DIR, <status> RUN_STATUS, <stamp> STAMP_FILE,
-// <container-log> CONTAINER_LOG. Exits 0 pass, 75 retry the container, 1 fail.
+// <container-log> CONTAINER_LOG. Exits 0 pass, 75 retry, 1 the suite failed, 2 no report to read.
 
 import { appendFileSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -141,100 +141,152 @@ function done(code, lines, notices = []) {
  * @returns {{code: number, markdown: string, notices: string[]}} Exit code, the step summary to
  *   write, and any workflow commands to print.
  */
-export function decide({ dir, status = 0, stamp, containerLog } = {}) {
-  const summaryPath = join(dir, 'summary.json');
-  const htmlPath = join(dir, 'report.html');
-  const playerLog = join(dir, 'Player.log');
+// The nine checks, in order. GUARDS run first and are the only place a retry can come from, so a
+// failed scenario can never reach one. VERDICTS then pick exactly one answer from a report we read.
+const GUARDS = [
+  // 1. the stamp is the only way to tell this run's report from a previous attempt's
+  { n: 1, name: 'no-stamp', run: ({ stamp, stampMs }) => stampMs !== null ? null
+      : done(EXIT_NO_REPORT, [`**No stamp file at \`${stamp}\`.** The caller has to \`mktemp\` one before \`docker run\`.`]) },
 
-  // 1. the stamp is the only way to tell this run's report from a previous attempt's.
-  const stampMs = mtime(stamp);
-  if (stampMs === null) {
-    return done(EXIT_NO_REPORT, [`**No stamp file at \`${stamp}\`.** The caller has to \`mktemp\` one before \`docker run\`.`]);
+  // 2. the last point a retry is possible
+  { n: 2, name: 'never-reported', run: (ctx) => ctx.summaryMs !== null ? null : judgeNoReport(ctx) },
+
+  // 3. the suite reported, so nothing below can retry
+  { n: 3, name: 'unreadable-summary', run: (ctx) => ctx.summary !== undefined ? null
+      : done(EXIT_NO_REPORT, [`**summary.json is not valid JSON.** ${ctx.summaryError.message}`]) },
+];
+
+const VERDICTS = [
+  // 4. report.html is the last file WriteReports emits, so losing it alone means it threw
+  { n: 4, name: 'report-write-threw', run: ({ htmlMs, dir }) => htmlMs !== null ? null
+      : { code: EXIT_FAIL, verdict: `**The report write failed partway.** \`${dir}\` has summary.json but no report.html newer than the stamp.` } },
+
+  // 5. an unfiltered empty run throws from 1c18a3a on, so this is a filter that matched nothing
+  { n: 5, name: 'zero-scenarios', run: ({ total, exitReason, playerLog }) => {
+      if (total !== 0) return null;
+      const help = filterHelp(playerLog);
+      return {
+        code: EXIT_FAIL,
+        verdict: `**Zero scenarios ran** (exitReason \`${exitReason}\`).`,
+        detail: help ? ['', '```', help, '```'] : [],
+      };
+    } },
+
+  // 6. the table further down is the answer a reader came for, not this line
+  { n: 6, name: 'scenarios-failed', run: ({ failed, total }) => failed === 0 ? null
+      : { code: EXIT_FAIL, verdict: `**${failed} of ${total} scenarios failed.**` } },
+
+  // 7. catches failed, infrastructure-error, watchdog-timeout and a killed run's in-progress
+  { n: 7, name: 'did-not-finish', run: ({ exitReason }) => exitReason === 'passed' ? null
+      : { code: EXIT_FAIL, verdict: `**The run did not finish** (exitReason \`${exitReason}\`).` } },
+
+  // 8. xvfb-run tears the display down after the game exits and takes the exit code with it
+  { n: 8, name: 'passed', run: ({ total, status }) => ({
+      code: 0,
+      verdict: `**All ${total} scenario${total === 1 ? '' : 's'} passed.**`,
+      notices: status === 0 ? [] : [
+        `::notice title=Pickle container exit ${status}::every scenario passed; ` +
+          'this exit code is xvfb-run teardown, not a failed run',
+      ],
+    }) },
+];
+
+// The no-summary branch: an X death retries, anything else reports what it could and could not read.
+function judgeNoReport({ dir, status, containerLog, playerLog, stampMs, fresh }) {
+  // the runners truncate the container log per attempt, so only Player.log can be a leftover
+  const scan = xServerScan([{ path: playerLog, since: stampMs }, { path: containerLog }]);
+  if (scan.died) {
+    return done(EXIT_RETRY, [
+      '**The X server died before the suite reported.** That is a flake, worth one retry.',
+      '',
+      `Container exit ${status}, no summary.json newer than the stamp.`,
+    ]);
   }
 
+  const lines = [
+    '**This run never reported.**',
+    '',
+    `No summary.json under \`${dir}\` newer than the stamp, and nothing in Player.log or the`,
+    `container log says the X server died. Container exit ${status}.`,
+  ];
+  const notices = [];
+
+  if (scan.stale.length > 0) {
+    lines.push('', `\`${scan.stale.join('`, `')}\` predates the stamp, so it is a previous attempt's file and was not read.`);
+  }
+
+  // run-suite.sh writes the container's stdout to $RUNNER_TEMP/container.log, so a caller that
+  // passes a different path greps a file nothing wrote
+  if (containerLog == null || scan.unreadable.includes(String(containerLog))) {
+    const where = containerLog == null ? '(no path given)' : `\`${containerLog}\``;
+    lines.push(
+      '',
+      `**No container log to grep at ${where}.** The X-server check ran blind, so a dead X`,
+      'server would read as a real failure and never retry. Pass the path run-suite.sh wrote to.',
+    );
+    notices.push(
+      '::error title=Pickle container log missing::' +
+        `nothing to read at ${containerLog ?? '(no path given)'}; the X-server retry check was blind`,
+    );
+  }
+
+  // unanchored on purpose: CI writes the line bare and a locally configured RimLogging wraps it in
+  // a colour tag, so anchoring would claim Pickle never loaded when it did
+  const bootLog = fresh(playerLog) === null ? null : read(playerLog);
+  if (bootLog != null && !bootLog.includes('pickle: loaded')) {
+    lines.push(
+      '',
+      '**Pickle never loaded.** Player.log carries no `pickle: loaded`, which PickleMod writes',
+      'from its constructor, so the mod was never built. Check ModsConfig.xml reached the game:',
+      'on linux the config dir mounts as the Config folder, on windows it mounts at /config/Config.',
+    );
+  }
+
+  const last = tail(containerLog, 20);
+  if (last) lines.push('', 'Last 20 lines of the container log:', '', '```', last, '```');
+  return done(EXIT_NO_REPORT, lines, notices);
+}
+
+export function decide({ dir, status = 0, stamp, containerLog } = {}) {
+  const stampMs = mtime(stamp);
   // every report file goes through here: older than the stamp is a leftover, so it reads as absent
   const fresh = (path) => {
     const ms = mtime(path);
     return ms !== null && ms > stampMs ? ms : null;
   };
 
-  // 2. the last point a retry is possible. Everything below had a report to read.
-  const summaryMs = fresh(summaryPath);
-  if (summaryMs === null) {
-    // the runners truncate the container log per attempt, so only Player.log can be a leftover
-    const scan = xServerScan([{ path: playerLog, since: stampMs }, { path: containerLog }]);
-    if (scan.died) {
-      return done(EXIT_RETRY, [
-        '**The X server died before the suite reported.** That is a flake, worth one retry.',
-        '',
-        `Container exit ${status}, no summary.json newer than the stamp.`,
-      ]);
-    }
+  const summaryPath = join(dir, 'summary.json');
+  const htmlPath = join(dir, 'report.html');
+  const ctx = { dir, status, stamp, stampMs, containerLog, fresh, playerLog: join(dir, 'Player.log') };
+  ctx.summaryMs = stampMs === null ? null : fresh(summaryPath);
 
-    const blind = containerLog == null || scan.unreadable.includes(String(containerLog));
-    const lines = [
-      '**This run never reported.**',
-      '',
-      `No summary.json under \`${dir}\` newer than the stamp, and nothing in Player.log or the`,
-      `container log says the X server died. Container exit ${status}.`,
-    ];
-    const notices = [];
-    if (scan.stale.length > 0) {
-      lines.push(
-        '',
-        `\`${scan.stale.join('`, `')}\` predates the stamp, so it is a previous attempt's file and was not read.`,
-      );
+  if (ctx.summaryMs !== null) {
+    try {
+      ctx.summary = JSON.parse(readFileSync(summaryPath, 'utf8'));
+    } catch (error) {
+      ctx.summaryError = error;
     }
-    if (blind) {
-      // run-suite.sh writes the container's stdout to $RUNNER_TEMP/container.log and never copies
-      // it into the report dir, so a caller that does not pass the real path checks nothing.
-      const where = containerLog == null ? '(no path given)' : `\`${containerLog}\``;
-      lines.push(
-        '',
-        `**No container log to grep at ${where}.** The X-server check ran blind, so a dead X`,
-        'server would read as a real failure and never retry. Pass the path run-suite.sh wrote to.',
-      );
-      notices.push(
-        '::error title=Pickle container log missing::' +
-          `nothing to read at ${containerLog ?? '(no path given)'}; the X-server retry check was blind`,
-      );
-    }
-    // unanchored on purpose: CI writes the line bare, a locally configured RimLogging wraps it in
-    // a colour tag and a timestamp, and anchoring would claim Pickle never loaded when it did.
-    const bootLog = fresh(playerLog) === null ? null : read(playerLog);
-    if (bootLog != null && !bootLog.includes('pickle: loaded')) {
-      lines.push(
-        '',
-        '**Pickle never loaded.** Player.log carries no `pickle: loaded`, which PickleMod writes',
-        'from its constructor, so the mod was never built. Check ModsConfig.xml reached the game:',
-        'on linux the config dir mounts as the Config folder, on windows it mounts at /config/Config.',
-      );
-    }
-
-    const last = tail(containerLog, 20);
-    if (last) lines.push('', 'Last 20 lines of the container log:', '', '```', last, '```');
-    return done(EXIT_NO_REPORT, lines, notices);
   }
 
-  // 3. the suite reported, so no path below can retry and a failed scenario never sees a 75.
-  let summary;
-  try {
-    summary = JSON.parse(readFileSync(summaryPath, 'utf8'));
-  } catch (error) {
-    return done(EXIT_NO_REPORT, [`**summary.json is not valid JSON.** ${error.message}`]);
+  for (const guard of GUARDS) {
+    const out = guard.run(ctx);
+    if (out) return out;
   }
 
-  const total = summary.total ?? 0;
-  const passed = summary.passed ?? 0;
-  const failed = summary.failed ?? 0;
-  const skipped = summary.skipped ?? 0;
-  const flaky = summary.flaky ?? 0;
-  const exitReason = summary.exitReason ?? 'unknown';
+  const summary = ctx.summary;
+  Object.assign(ctx, {
+    total: summary.total ?? 0,
+    passed: summary.passed ?? 0,
+    failed: summary.failed ?? 0,
+    skipped: summary.skipped ?? 0,
+    flaky: summary.flaky ?? 0,
+    exitReason: summary.exitReason ?? 'unknown',
+    htmlMs: fresh(htmlPath),
+  });
 
-  const htmlMs = fresh(htmlPath);
   let payload = null;
   let payloadError = null;
-  if (htmlMs !== null) {
+  if (ctx.htmlMs !== null) {
     try {
       payload = readPayload(readFileSync(htmlPath, 'utf8'));
       if (!payload) payloadError = 'report.html carries no pickle-report payload.';
@@ -243,60 +295,30 @@ export function decide({ dir, status = 0, stamp, containerLog } = {}) {
     }
   }
 
-  const notices = [];
-  const detail = [];
-  let code = 0;
-  let verdict;
+  const answer = VERDICTS.map((check) => check.run(ctx)).find(Boolean);
+  const { code, verdict, detail = [], notices = [] } = answer;
 
-  if (htmlMs === null) {
-    // 4. report.html is the last file WriteReports emits, so losing it alone means it threw.
-    code = EXIT_FAIL;
-    verdict = `**The report write failed partway.** \`${dir}\` has summary.json but no report.html newer than the stamp.`;
-  } else if (total === 0) {
-    // 5. an unfiltered empty run throws from 1c18a3a on, so this is a filter that matched
-    // nothing, or a consumer pinned to an older Pickle.
-    code = EXIT_FAIL;
-    verdict = `**Zero scenarios ran** (exitReason \`${exitReason}\`).`;
-    const help = filterHelp(playerLog);
-    if (help) detail.push('', '```', help, '```');
-  } else if (failed > 0) {
-    code = EXIT_FAIL;
-    verdict = `**${failed} of ${total} scenarios failed.**`;
-  } else if (exitReason !== 'passed') {
-    // 7. catches failed, infrastructure-error, watchdog-timeout and a killed run's in-progress.
-    code = EXIT_FAIL;
-    verdict = `**The run did not finish** (exitReason \`${exitReason}\`).`;
-  } else {
-    verdict = `**All ${total} scenario${total === 1 ? '' : 's'} passed.**`;
-    // 8. xvfb-run tears the display down after the game exits and takes the exit code with it.
-    if (status !== 0) {
-      notices.push(
-        `::notice title=Pickle container exit ${status}::every scenario passed; ` +
-          'this exit code is xvfb-run teardown, not a failed run',
-      );
-    }
-  }
-
+  const { total, passed, failed, skipped, flaky, exitReason, htmlMs } = ctx;
   const counts = `${passed} passed, ${failed} failed, ${skipped} skipped, exitReason \`${exitReason}\`.`;
   const lines = [verdict, '', PARTIAL_REASONS.has(exitReason) ? `${counts} **The counts are partial.**` : counts];
 
-  // 9. counted, never gated on: a scenario that failed then passed on retry is a pass.
+  // 9. counted, never gated on: a scenario that failed then passed on retry is a pass
   if (flaky > 0) lines.push('', `${flaky} scenario(s) failed at least once before passing.`);
   lines.push(...detail);
 
   const failures = payload ? failuresFrom(payload) : [];
   // summary.json is the verdict, so an unreadable payload never gates. it still gets said out loud
-  // on a green run: a killed container leaves a half-written report.html and nothing else shows it.
+  // on a green run: a killed container leaves a half-written report.html and nothing else shows it
   if (payloadError) {
     lines.push('', `No failure table: ${payloadError}`);
     // %0A because a JSON.parse message can carry the newline it choked on, which would cut the
-    // annotation short and spill the rest as plain stdout.
+    // annotation short and spill the rest as plain stdout
     notices.push(`::warning title=Pickle report.html unreadable::${payloadError.replace(/\r?\n/g, '%0A')}`);
   }
 
-  // WriteReports rewrites every file on an interval, so a container killed between writes leaves
-  // an html payload older than summary.json and short of the last failures.
-  if (failures.length > 0 && htmlMs < summaryMs) {
+  // WriteReports rewrites every file on an interval, so a container killed between writes leaves an
+  // html payload older than summary.json and short of the last failures
+  if (failures.length > 0 && htmlMs < ctx.summaryMs) {
     lines.push('', 'report.html is older than summary.json, so this table can be missing the last failures.');
   }
 
@@ -313,11 +335,12 @@ export function decide({ dir, status = 0, stamp, containerLog } = {}) {
   return done(code, lines, notices);
 }
 
+export const CHECK_ORDER = [...GUARDS, ...VERDICTS].map((c) => `${c.n}:${c.name}`);
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dir = process.argv[2] || process.env.REPORT_DIR;
   const stamp = process.argv[4] || process.env.STAMP_FILE;
-  // no default for the container log: the old join(dir, 'container.log') pointed at a path nothing
-  // writes, so the retry grep read an empty string and every X death failed instead of retrying.
+  // no default: a guessed path reads empty, and an empty grep fails every X death instead of retrying
   const containerLog = process.argv[5] || process.env.CONTAINER_LOG;
   if (!dir || !stamp || !containerLog) {
     process.stderr.write('usage: verdict.mjs <report-dir> <status> <stamp> <container-log>\n');
