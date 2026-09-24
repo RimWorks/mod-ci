@@ -106,8 +106,10 @@ for i in "${!mod_srcs[@]}"; do
   dest="$MODS_DIR/${mod_mounts[$i]}"
   rm -rf "$dest"
   mkdir -p "$dest"
+  # the game loads from Assemblies, so build intermediates are weight with no reader
   tar -c -C "${mod_srcs[$i]}" --exclude=.git --exclude=node_modules --exclude=Source \
-      --exclude=Dashboard --exclude=pickle-reports . | tar -x -C "$dest"
+      --exclude=Dashboard --exclude=pickle-reports --exclude=artifacts --exclude=bin \
+      --exclude=obj . | tar -x -C "$dest"
   echo "staged ${mod_srcs[$i]} as ${mod_mounts[$i]}"
 done
 
