@@ -326,10 +326,10 @@ and the message from each failed scenario, go to the job summary instead.
 itself. `GITHUB_TOKEN` is not declared and does not need to be: a called workflow reads it without
 a declaration.
 
-**Permissions.** The calling job grants `contents: read`, `packages: read` and `actions: read`, and
-`packages: write` instead of `packages: read` when `game-image` is empty, because the workflow then
-builds the image itself and pushes it. A called workflow cannot widen the caller's scopes, so a job
-that grants less than the nested image job asks for fails at setup.
+**Permissions.** The calling job grants `contents: read`, `packages: write` and `actions: read`.
+Write, not read, even when `game-image` names an image and the build is skipped: GitHub checks a
+caller against every nested job before it evaluates the conditions that skip one. A job granting
+less than the image job declares fails at setup, before anything runs.
 
 A caller has to respect the rules below. The first is a limit the workflow cannot detect. Each of
 the rest fails the job rather than warning, because a job skipped by an `if:` reports as skipped
