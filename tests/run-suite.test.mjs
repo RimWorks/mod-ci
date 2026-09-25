@@ -96,8 +96,8 @@ test('keeps the spaces in a filter, so a set name reaches the game as one argume
 test('mounts the config directory where the game looks for it on windows', async () => {
   // GenFilePaths.ConfigFolderPath is savedatafolder plus Config, so a flat mount hides ModsConfig
   const { argv } = await suite('windows', { UNFILTERED: 'true' });
-  assert.ok(argv.some((arg) => arg.endsWith('/config:/config/Config')));
-  assert.ok(argv.includes('-savedatafolder=Z:\\config'));
+  assert.ok(argv.some((arg) => arg.endsWith('/config:/home/app/savedata/Config')));
+  assert.ok(argv.includes('-savedatafolder=Z:\\home\\app\\savedata'));
 });
 
 // A retry reuses one container.log path, so an attempt that exits before docker runs has to leave

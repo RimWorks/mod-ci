@@ -51,14 +51,15 @@ if [[ -n "$RUN_TIMEOUT" ]]; then
   game_args+=("-pickle-run-timeout=$RUN_TIMEOUT")
 fi
 
-# GenFilePaths.ConfigFolderPath is savedatafolder plus Config, so one staged dir feeds both platforms
+# savedatafolder plus Config is the config dir, and it sits under the game user's home
+# because the image only chowns mount parents below $HOME. elsewhere Saves cannot be created
 docker run --rm --name pickle-suite-win \
   -v "$MODS_DIR:/game/Mods:ro" \
-  -v "$CONFIG_DIR:/config/Config" \
+  -v "$CONFIG_DIR:/home/app/savedata/Config" \
   -v "$REPORT_DIR:/out" \
   "$IMAGE" \
   run-headless-windows 'Z:\game\RimWorldWin64.exe' \
-    '-savedatafolder=Z:\config' "${game_args[@]}" \
+    '-savedatafolder=Z:\home\app\savedata' "${game_args[@]}" \
     '-pickle-report-dir=Z:\out' '-logfile' 'Z:\out\Player.log' \
   > "$TMP/container.log" 2>&1 &
 game=$!

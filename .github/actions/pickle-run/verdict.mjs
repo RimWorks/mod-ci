@@ -203,7 +203,7 @@ function judgeNoReport({ dir, status, containerLog, playerLog, stampMs, fresh })
       '',
       '**Pickle never loaded.** Player.log carries no `pickle: loaded`, which PickleMod writes',
       'from its constructor, so the mod was never built. Check ModsConfig.xml reached the game:',
-      'on linux the config dir mounts as the Config folder, on windows it mounts at /config/Config.',
+      'on linux the config dir mounts as the Config folder, on windows at /home/app/savedata/Config.',
     );
   }
 
