@@ -79,6 +79,18 @@ jobs:
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}
 
+      - name: Report what was built
+        run: |
+          {
+            echo "## RimWorld game image"
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| ref | \`${{ steps.image.outputs.image-ref }}\` |"
+            echo "| steam buildid | ${{ steps.image.outputs.buildid }} |"
+            echo "| rebuilt | ${{ steps.image.outputs.skipped == 'true' && 'no, buildid unchanged' || 'yes' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   image-windows:
     name: rimworld windows image
     if: inputs.windows
@@ -106,3 +118,15 @@ jobs:
           include-paths: ${{ inputs.include-paths }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}
+
+      - name: Report what was built
+        run: |
+          {
+            echo "## RimWorld Windows game image"
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| ref | \`${{ steps.image.outputs.image-ref }}\` |"
+            echo "| steam buildid | ${{ steps.image.outputs.buildid }} |"
+            echo "| rebuilt | ${{ steps.image.outputs.skipped == 'true' && 'no, buildid unchanged' || 'yes' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -174,9 +174,19 @@ jobs:
           nameless="$(jq -r '[.set[] | select(.name == "")] | length' <<< "$matrix")"
           (( nameless == 0 )) || die "$nameless set(s) have no name. a set needs one to upload under."
 
+          # a misspelled key reads as absent, so the leg stages nothing and still reports green
+          stray="$(jq -r '
+            [.[] | keys[] | select(. != "name" and . != "backend" and . != "extraMods")]
+            | unique | join(", ")' <<< "$legs")"
+          [[ -z "$stray" ]] || die "unknown key(s) in a set: $stray. a set takes name, backend and extraMods."
+
           # two legs sharing a name means the second upload-artifact fails, half an hour in
           dups="$(jq -r '.set[].name' <<< "$matrix" | sort | uniq -d | paste -sd, -)"
           [[ -z "$dups" ]] || die "these set names repeat: $dups. each leg uploads pickle-report-<name>."
+
+          # upload-artifact refuses these, and the merge reads the name as a path segment
+          badchars="$(jq -r '[.set[].name | select(test("[\"<>|*?:/\\\\\r\n]"))] | join(", ")' <<< "$matrix")"
+          [[ -z "$badchars" ]] || die "set name '$badchars' carries a character an artifact name cannot hold: \" : < > | * ? / \\ or a newline."
 
           bad="$(jq -r '[.set[].backend | select(. != "harmony" and . != "concord" and . != "both")] | join(", ")' <<< "$matrix")"
           [[ -z "$bad" ]] || die "backend '$bad' is not harmony, concord or both"

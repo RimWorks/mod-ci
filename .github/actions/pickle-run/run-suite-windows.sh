@@ -13,6 +13,8 @@ SET_NAME="${SET_NAME:-}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-}"
 
 TMP="${RUNNER_TEMP:-/tmp}"
+# before any exit path: a stale log from the last attempt reads as this one's X death
+: > "$TMP/container.log"
 
 # PickleArgs.IntArg silently keeps its own 60 for a value int.TryParse refuses
 [[ -z "$RUN_TIMEOUT" || "$RUN_TIMEOUT" =~ ^[0-9]+$ ]] ||
@@ -49,7 +51,6 @@ if [[ -n "$RUN_TIMEOUT" ]]; then
   game_args+=("-pickle-run-timeout=$RUN_TIMEOUT")
 fi
 
-: > "$TMP/container.log"
 # GenFilePaths.ConfigFolderPath is savedatafolder plus Config, so one staged dir feeds both platforms
 docker run --rm --name pickle-suite-win \
   -v "$MODS_DIR:/game/Mods:ro" \

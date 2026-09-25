@@ -99,3 +99,22 @@ test('mounts the config directory where the game looks for it on windows', async
   assert.ok(argv.some((arg) => arg.endsWith('/config:/config/Config')));
   assert.ok(argv.includes('-savedatafolder=Z:\\config'));
 });
+
+// A retry reuses one container.log path, so an attempt that exits before docker runs has to leave
+// an empty one or the verdict greps the last attempt's X death and retries for the wrong reason.
+for (const platform of ['linux', 'windows']) {
+  test(`${platform}: an early exit still clears the last attempt's container log`, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'run-suite-stale-'));
+    await mkdir(join(root, 'mods'));
+    await mkdir(join(root, 'config'));
+    await writeFile(join(root, 'container.log'), 'XIO:  fatal IO error 11\n');
+
+    // a non-numeric film length exits before docker is reached
+    await run('bash', [scripts[platform], 'example/image', join(root, 'mods'), join(root, 'config'),
+      join(root, 'reports')], {
+      env: { PATH: process.env.PATH, RUNNER_TEMP: root, UNFILTERED: 'true', FILM_SECONDS: 'false' },
+    }).catch((e) => e);
+
+    assert.equal(await readFile(join(root, 'container.log'), 'utf8'), '');
+  });
+}

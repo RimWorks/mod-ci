@@ -278,6 +278,10 @@ the copies drifted apart. That is the failure the release plumbing here exists t
 ```yaml
   suite:
     uses: RimWorks/mod-ci/.github/workflows/pickle-suite.yml@v1
+    permissions:
+      contents: read
+      packages: write
+      actions: read
     with:
       mod-name: RimLogging
       mod-package-id: rimworks.rimlogging
@@ -321,6 +325,11 @@ and the message from each failed scenario, go to the job summary instead.
 `STEAM_CONFIG_VDF_B64` when `game-image` is empty, because the workflow then builds the image
 itself. `GITHUB_TOKEN` is not declared and does not need to be: a called workflow reads it without
 a declaration.
+
+**Permissions.** The calling job grants `contents: read`, `packages: read` and `actions: read`, and
+`packages: write` instead of `packages: read` when `game-image` is empty, because the workflow then
+builds the image itself and pushes it. A called workflow cannot widen the caller's scopes, so a job
+that grants less than the nested image job asks for fails at setup.
 
 A caller has to respect the rules below. The first is a limit the workflow cannot detect. Each of
 the rest fails the job rather than warning, because a job skipped by an `if:` reports as skipped

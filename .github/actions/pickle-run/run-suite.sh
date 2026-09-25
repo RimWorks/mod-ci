@@ -18,6 +18,8 @@ RUN_TIMEOUT="${RUN_TIMEOUT:-}"
 # the action ships its scripts beside this one, wherever the runner unpacked it
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="${RUNNER_TEMP:-/tmp}"
+# before any exit path: a stale log from the last attempt reads as this one's X death
+: > "$TMP/container.log"
 CFG="/home/app/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config"
 
 # PickleArgs.IntArg silently keeps its own 60 for a value int.TryParse refuses
@@ -73,7 +75,6 @@ if [[ "$LIVE_DASHBOARD" == "true" ]]; then
   game_args+=("-pickle-http-port=$DASHBOARD_PORT")
 fi
 
-: > "$TMP/container.log"
 docker run --rm --name "pickle-suite${SET_NAME:+-$SET_NAME}" \
   -v "$MODS_DIR:/game/Mods:ro" \
   -v "$CONFIG_DIR:$CFG" \
