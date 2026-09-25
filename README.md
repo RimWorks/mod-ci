@@ -162,6 +162,27 @@ or has backticks in it. It exits `1` when `DISCORD_WEBHOOK_URL` is missing.
 
 Call these from a consumer repo instead of copying them.
 
+**Grant the permissions the workflow declares.** A called workflow cannot hold a wider
+`GITHUB_TOKEN` scope than its caller granted. GitHub compares the two before it starts any job,
+so a caller that grants less fails the whole run at startup, before any job produces a log.
+The check reaches through every level, so a workflow that calls a workflow that calls one of
+these has to grant the scopes at each hop.
+
+| Workflow | Permissions the calling job must grant |
+| --- | --- |
+| `assetbundles` | `contents: read` |
+| `codeql` | `contents: read`, `security-events: write` |
+| `dotnet-build` | `contents: read`, `checks: write`, `packages: read` |
+| `game-image` | `contents: read`, `packages: write` |
+| `links` | `contents: read` |
+| `node-build` | `contents: read` |
+| `pickle-suite` | `contents: read`, `packages: write`, `actions: read` |
+| `prose` | `contents: read` |
+| `ship-list` | `contents: read` |
+| `sonar` | `contents: read`, `packages: read` |
+| `sonar-scan` | `contents: read` |
+| `test` | `contents: read` |
+
 ### `assetbundles`
 
 Builds Unity asset bundles for every mod directory you name, then uploads one zip per mod. The
