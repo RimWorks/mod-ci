@@ -95,7 +95,7 @@ jobs:
 
       - name: Setup pnpm
         if: inputs.package-manager == 'pnpm'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
@@ -117,7 +117,7 @@ jobs:
         run: ${{ inputs.pre-scan-command }}
 
       # sha rather than ./ because a called workflow only has the caller's repo checked out
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@0be60da5b15755db2fde5ea99d2eaa7d519e79e7 # test-command
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@e4057083e7deb547164d4a749c5ad0abe3a1f907 # test-command
         with:
           solution: ${{ inputs.solution }}
           project-key: ${{ inputs.project-key }}
