@@ -1,0 +1,80 @@
+name: package deps
+
+# A reference package that reaches the nuspec gives every consumer a second copy of each game
+# type. Packing on a dev box passes for the wrong reason; a runner has no game, so it forces it.
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: Project to pack, for example Source/Pickle.Ref/Pickle.Ref.csproj
+        type: string
+        required: true
+      dotnet-version:
+        description: Passed to setup-dotnet.
+        type: string
+        default: '10.0.x'
+      reference-packages:
+        description: Newline list of package ids that must never reach a consumer.
+        type: string
+        default: Krafs.Rimworld.Ref
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: package deps
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Pack and read the nuspec
+        env:
+          PROJECT: ${{ inputs.project }}
+          BANNED: ${{ inputs.reference-packages }}
+        run: |
+          out="$RUNNER_TEMP/pack"
+          dotnet pack "$PROJECT" -c Release -o "$out"
+
+          pkg="$(find "$out" -name '*.nupkg' -print -quit)"
+          [[ -n "$pkg" ]] || { echo "::error::$PROJECT produced no nupkg"; exit 1; }
+          echo "packed $(basename "$pkg")"
+
+          python3 - <<'PY'
+          import os, re, sys, zipfile
+
+          banned = {p.strip().lower() for p in os.environ["BANNED"].splitlines() if p.strip()}
+          out = os.environ["RUNNER_TEMP"] + "/pack"
+          pkg = next(f for f in os.listdir(out) if f.endswith(".nupkg"))
+
+          with zipfile.ZipFile(os.path.join(out, pkg)) as z:
+              name = next(n for n in z.namelist() if n.endswith(".nuspec"))
+              nuspec = z.read(name).decode("utf-8")
+
+          bad = [
+              line.strip()
+              for line in nuspec.splitlines()
+              if "<dependency " in line
+              and (m := re.search(r'id="([^"]+)"', line))
+              and m.group(1).lower() in banned
+          ]
+
+          if not bad:
+              print(f"{pkg}: no reference-assembly dependencies")
+              sys.exit(0)
+
+          for line in bad:
+              print(f"::error::{pkg} ships a reference-assembly dependency: {line}")
+          print(
+              "A consumer restoring this package also restores that one, so every game type is "
+              "defined twice and their build fails with CS0433. An exclude= attribute on the line "
+              "does not prevent it. Add PrivateAssets=\"all\" to the PackageReference instead."
+          )
+          sys.exit(1)
+          PY
