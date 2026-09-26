@@ -75,7 +75,10 @@ if [[ "$LIVE_DASHBOARD" == "true" ]]; then
   game_args+=("-pickle-http-port=$DASHBOARD_PORT")
 fi
 
+# unity marks incrementally while other threads run, and a freed mono root left on the
+# mark stack takes the collector out. ~5% of boots, any patcher, not ours to fix.
 docker run --rm --name "pickle-suite${SET_NAME:+-$SET_NAME}" \
+  -e GC_DISABLE_INCREMENTAL=1 \
   -v "$MODS_DIR:/game/Mods:ro" \
   -v "$CONFIG_DIR:$CFG" \
   -v "$REPORT_DIR:/out" \
