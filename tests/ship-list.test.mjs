@@ -4,84 +4,98 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 
-import { shippedPaths, missingFromReleaseZip } from '../lib/ship-list.mjs';
+import { declaredVersions, versionFolderMismatch } from '../lib/ship-list.mjs';
 
-const RIMLOGGING_BROKEN =
-  "prepareCmd: 'mkdir -p dist/RimLogging && cp -r About Assemblies Concord Defs Harmony Languages loadFolders.xml LICENSE README.md dist/RimLogging/ && cd dist && zip -qr out.zip RimLogging'";
+const PICKLE_LOAD_FOLDERS = `<?xml version="1.0" encoding="utf-8"?>
+<loadFolders>
+  <v1.5>
+    <li>/</li>
+    <li>1.5</li>
+    <li IfModActive="brrainz.harmony">1.5/Harmony</li>
+  </v1.5>
+  <v1.6>
+    <li>/</li>
+    <li>1.6</li>
+    <li IfModActive="concordlib.concord">1.6/Concord</li>
+  </v1.6>
+</loadFolders>`;
 
-const RIMLOGGING_FIXED = RIMLOGGING_BROKEN.replace('Languages loadFolders.xml', 'Languages Textures loadFolders.xml');
-
-async function repoWith(config, dirs) {
+async function repoWith(loadFolders, dirs) {
   const root = await mkdtemp(join(tmpdir(), 'shiplist-'));
-  await writeFile(join(root, 'release.config.mjs'), config);
+  await writeFile(join(root, 'loadFolders.xml'), loadFolders);
   for (const d of dirs) await mkdir(join(root, d), { recursive: true });
   return root;
 }
 
-test('reads the copied paths out of the cp step', () => {
-  assert.deepEqual(shippedPaths(RIMLOGGING_BROKEN).slice(0, 3), ['About', 'Assemblies', 'Concord']);
+test('reads every version block, and the per-backend paths inside are not versions', () => {
+  assert.deepEqual(declaredVersions(PICKLE_LOAD_FOLDERS), ['1.5', '1.6']);
 });
 
-test('a config with no cp step is not a failure', () => {
-  assert.equal(shippedPaths('prepareCmd: "dotnet pack"'), null);
+test('a matching set of folders passes', async () => {
+  const root = await repoWith(PICKLE_LOAD_FOLDERS, ['1.5', '1.6', 'About']);
+  const { missing, undeclared } = await versionFolderMismatch(root);
+  assert.deepEqual([missing, undeclared], [[], []]);
 });
 
-test('catches the Textures folder RimLogging shipped without for 8 releases', async () => {
-  const root = await repoWith(RIMLOGGING_BROKEN, ['About', 'Defs', 'Languages', 'Textures']);
-  const { missing } = await missingFromReleaseZip(root);
-  assert.deepEqual(missing, ['Textures']);
+test('a version loadFolders claims with no folder built is reported', async () => {
+  const root = await repoWith(PICKLE_LOAD_FOLDERS, ['1.6']);
+  const { missing, undeclared } = await versionFolderMismatch(root);
+  assert.deepEqual(missing, ['1.5']);
+  assert.deepEqual(undeclared, []);
 });
 
-test('passes once the cp step copies Textures', async () => {
-  const root = await repoWith(RIMLOGGING_FIXED, ['About', 'Defs', 'Languages', 'Textures']);
-  const { missing } = await missingFromReleaseZip(root);
+test('a bare checkout reports every claimed version, it does not pass', async () => {
+  const root = await repoWith(PICKLE_LOAD_FOLDERS, ['About', 'Defs']);
+  const { missing } = await versionFolderMismatch(root);
+  assert.deepEqual(missing, ['1.5', '1.6']);
+});
+
+test('a folder on disk no version block claims is reported', async () => {
+  const root = await repoWith(PICKLE_LOAD_FOLDERS, ['1.4', '1.5', '1.6']);
+  const { missing, undeclared } = await versionFolderMismatch(root);
   assert.deepEqual(missing, []);
+  assert.deepEqual(undeclared, ['1.4']);
 });
 
-test('a directory the repo does not have is not reported missing', async () => {
-  const root = await repoWith(RIMLOGGING_FIXED, ['About']);
-  const { missing } = await missingFromReleaseZip(root);
-  assert.deepEqual(missing, []);
+test('both directions report at once', async () => {
+  const root = await repoWith(PICKLE_LOAD_FOLDERS, ['1.6', '1.9']);
+  const { missing, undeclared } = await versionFolderMismatch(root);
+  assert.deepEqual([missing, undeclared], [['1.5'], ['1.9']]);
 });
 
-test('a repo with no release config is an error, not a silent pass', async () => {
+test('a repo with no loadFolders.xml is an error, not a silent pass', async () => {
   const root = await mkdtemp(join(tmpdir(), 'shiplist-'));
-  await assert.rejects(() => missingFromReleaseZip(root), /no release.config.mjs/);
+  await assert.rejects(() => versionFolderMismatch(root), /no loadFolders.xml/);
 });
 
-const PICKLE_ZIP =
-  'zip -r Pickle-${nextRelease.version}.zip About Assemblies Harmony Concord Languages Pickle loadFolders.xml -x "*.pdb" "About/Preview.xcf"';
-
-test('reads the zip -r form the other three repos use', () => {
-  assert.deepEqual(shippedPaths(PICKLE_ZIP), [
-    'About', 'Assemblies', 'Harmony', 'Concord', 'Languages', 'Pickle', 'loadFolders.xml',
-  ]);
-});
-
-test('the -x exclusions are not mistaken for shipped paths', () => {
-  assert.ok(!shippedPaths(PICKLE_ZIP).includes('*.pdb'));
-});
-
-test('catches the Defs and Patches Pickle omits from its zip', async () => {
-  const root = await repoWith(PICKLE_ZIP, ['About', 'Defs', 'Languages', 'Patches']);
-  const { missing } = await missingFromReleaseZip(root);
-  assert.deepEqual(missing, ['Defs', 'Patches']);
+test('a loadFolders.xml with no version block is an error, not a vacuous pass', async () => {
+  const root = await repoWith('<loadFolders></loadFolders>', ['1.6']);
+  await assert.rejects(() => versionFolderMismatch(root), /no <vX\.Y> block/);
 });
 
 test('every read stays inside the root it was given', async () => {
-  const root = await repoWith(PICKLE_ZIP, ['About', 'Defs']);
-  const { missing } = await missingFromReleaseZip(`${root}${sep}About${sep}..`);
-  assert.deepEqual(missing, ['Defs']);
+  const root = await repoWith(PICKLE_LOAD_FOLDERS, ['About', '1.5']);
+  const { missing } = await versionFolderMismatch(`${root}${sep}About${sep}..`);
+  assert.deepEqual(missing, ['1.6']);
 });
 
 test('a plain relative path still reads the repo it points at', async () => {
-  const root = await repoWith(PICKLE_ZIP, ['About', 'Defs']);
+  const root = await repoWith(PICKLE_LOAD_FOLDERS, ['1.5']);
   const back = process.cwd();
   process.chdir(root);
   try {
-    const { missing } = await missingFromReleaseZip('.');
-    assert.deepEqual(missing, ['Defs']);
+    const { missing } = await versionFolderMismatch('.');
+    assert.deepEqual(missing, ['1.6']);
   } finally {
     process.chdir(back);
   }
+});
+
+test('sorts versions numerically, so at(-1) is the newest once 1.10 exists', () => {
+  const xml = '<loadFolders><v1.5><li>1.5</li></v1.5><v1.10><li>1.10</li></v1.10>'
+    + '<v1.6><li>1.6</li></v1.6><v1.9><li>1.9</li></v1.9></loadFolders>';
+  const versions = declaredVersions(xml);
+
+  assert.deepEqual(versions, ['1.5', '1.6', '1.9', '1.10']);
+  assert.equal(versions.at(-1), '1.10');
 });

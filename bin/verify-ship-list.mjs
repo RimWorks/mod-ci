@@ -1,27 +1,28 @@
 #!/usr/bin/env node
-import { missingFromReleaseZip } from '../lib/ship-list.mjs';
+import { versionFolderMismatch } from '../lib/ship-list.mjs';
 
 const root = process.argv[2] ?? process.cwd();
 
 let result;
 try {
-  result = await missingFromReleaseZip(root);
+  result = await versionFolderMismatch(root);
 } catch (err) {
   console.error(`verify-ship-list: ${err.message}`);
   process.exit(2);
 }
 
-const { shipped, missing } = result;
-
-if (shipped === null) {
-  console.log('no "cp -r ... dist/" step in release.config.mjs, nothing to check');
-  process.exit(0);
-}
+const { declared, missing, undeclared } = result;
 
 if (missing.length > 0) {
-  console.error(`release.config.mjs does not copy: ${missing.join(', ')}`);
-  console.error('Steam rsyncs the whole mod dir so it ships these, the GitHub zip does not.');
-  process.exit(1);
+  console.error(`loadFolders.xml claims ${missing.join(', ')} but no such folder was built`);
+  console.error('RimWorld falls back to the root for those, so the mod loads no assemblies.');
 }
 
-console.log(`release zip ships every mod content directory (${shipped.join(' ')})`);
+if (undeclared.length > 0) {
+  console.error(`${undeclared.join(', ')} is on disk but no <v> block in loadFolders.xml claims it`);
+  console.error('Nothing loads it, so it is dead weight in the zip and on Steam.');
+}
+
+if (missing.length > 0 || undeclared.length > 0) process.exit(1);
+
+console.log(`loadFolders.xml and the built folders agree (${declared.join(' ')})`);

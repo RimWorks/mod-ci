@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -34,4 +34,15 @@ test('records the commit and test count the workflow supplies', async () => {
     delete process.env.VERIFIED_COMMIT;
     delete process.env.VERIFIED_TESTS;
   }
+});
+
+test('names the game version from the refs directory', async () => {
+  const refs = await mkdtemp(join(tmpdir(), 'refs-'));
+  await writeFile(join(refs, 'Version.txt'), '1.5.4243 rev999\n');
+  const root = await mkdtemp(join(tmpdir(), 'stamp-'));
+
+  const body = await writeStamp({ modPath: root, refsDir: refs });
+
+  assert.match(body, /RimWorld\s+1\.5\.4243 rev999/);
+  assert.doesNotMatch(body, /Krafs/);
 });

@@ -15,12 +15,25 @@ on:
         type: string
         default: '10.0.x'
       reference-packages:
-        description: Newline list of package ids that must never reach a consumer.
+        description: >
+          Newline list of package ids that must never reach a consumer. Required: a caller names
+          its own, because the right list differs per project.
         type: string
-        default: Krafs.Rimworld.Ref
+        required: true
+      game-image:
+        description: >
+          Game image to compile against, as produced by game-image.yml. Required: the packed
+          project references the mod project, and there is no reference-package fallback.
+        type: string
+        required: true
+      game-version:
+        description: Version the pack compiles as. Picks the RW_* constant.
+        type: string
+        default: '1.6'
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   check:
@@ -34,10 +47,19 @@ jobs:
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
+      - name: Stage game assemblies
+        id: refs
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v1
+        with:
+          image: ${{ inputs.game-image }}
+
       - name: Pack and read the nuspec
         env:
           PROJECT: ${{ inputs.project }}
           BANNED: ${{ inputs.reference-packages }}
+          # msbuild reads an environment variable as a property, and pack is the only step here
+          GameVersion: ${{ inputs.game-version }}
+          GameManagedDir: ${{ steps.refs.outputs.managed-dir }}
         run: |
           out="$RUNNER_TEMP/pack"
           dotnet pack "$PROJECT" -c Release -o "$out"
@@ -50,6 +72,10 @@ jobs:
           import os, re, sys, zipfile
 
           banned = {p.strip().lower() for p in os.environ["BANNED"].splitlines() if p.strip()}
+          if not banned:
+              print("::error::reference-packages is empty, so this check would pass without testing anything")
+              sys.exit(1)
+
           out = os.environ["RUNNER_TEMP"] + "/pack"
           pkg = next(f for f in os.listdir(out) if f.endswith(".nupkg"))
 

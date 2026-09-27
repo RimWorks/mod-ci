@@ -38,12 +38,21 @@ on:
         description: Newline separated paths to upload when artifact-name is set.
         type: string
         default: ''
-      game-image:
+      game-images:
         description: >
-          Game image to stage real RimWorld assemblies from, as produced by game-image.yml.
-          Empty builds against the Krafs reference assemblies alone.
+          Newline separated "<version>=<image ref>" pairs, one per version to build, so a line
+          reads "1.5=ghcr.io/rimworks/rimworld-game:1.5.4409". Each leg compiles against its own
+          image, which is what keeps a version and its assemblies from drifting apart. Required:
+          there is no reference-package fallback. A malformed line, a duplicate version or an
+          empty list fails the run.
+
+
+          A caller gets N refs by calling game-image.yml once per version and composing the
+          pairs from its outputs. game-image.yml returns one image-ref and a matrix inside a
+          reusable workflow cannot emit a map, so composing in the caller is the shape that
+          works. The dotnet-build section of mod-ci's README has the job block to copy.
         type: string
-        default: ''
+        required: true
       game-managed-property:
         description: MSBuild property that receives the staged Managed directory.
         type: string
@@ -53,8 +62,50 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  # python, not jq: jq's capture() yields empty on a non-match and map() then drops the element,
+  # which is the silent skip this job exists to prevent
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      legs: ${{ steps.list.outputs.legs }}
+    steps:
+      - id: list
+        env:
+          GAME_IMAGES: ${{ inputs.game-images }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, re, sys
+
+          legs, seen = [], set()
+          for raw in os.environ["GAME_IMAGES"].splitlines():
+              line = raw.strip()
+              if not line:
+                  continue
+              hit = re.fullmatch(r"(\d+\.\d+)=(\S+)", line)
+              if not hit:
+                  print(f'::error::game-images line is not "<version>=<image ref>": {line}', file=sys.stderr)
+                  sys.exit(1)
+              version, image = hit.groups()
+              if version in seen:
+                  print(f"::error::game-images names {version} twice", file=sys.stderr)
+                  sys.exit(1)
+              seen.add(version)
+              legs.append({"version": version, "image": image})
+
+          if not legs:
+              print("::error::game-images is empty, so this build would compile nothing", file=sys.stderr)
+              sys.exit(1)
+
+          print("building " + ", ".join(f"{l['version']} from {l['image']}" for l in legs), file=sys.stderr)
+          print("legs=" + json.dumps({"include": legs}))
+          PY
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.legs) }}
     permissions:
       contents: read
       checks: write
@@ -67,35 +118,35 @@ jobs:
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
-      # A mod that patches sealed or private members cannot prove it compiles against the
-      # reference assemblies alone, so it builds twice when a game image is supplied.
+      # The real game assemblies are the only reference set. A mod that patches sealed or
+      # private members cannot compile against a reference package at all.
       - name: Stage game assemblies
-        if: inputs.game-image != ''
+        id: refs
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v1
+        with:
+          image: ${{ matrix.image }}
+
+      # dotnet test and dotnet format also resolve references, and format takes no -p:,
+      # so both properties go in the environment where msbuild reads them anyway
+      - name: Point msbuild at this leg's version and refs
         env:
-          GAME_IMAGE: ${{ inputs.game-image }}
-          GITHUB_TOKEN: ${{ github.token }}
+          MANAGED_PROPERTY: ${{ inputs.game-managed-property }}
+          MANAGED_DIR: ${{ steps.refs.outputs.managed-dir }}
         run: |
-          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker pull -q "$GAME_IMAGE"
-          cid="$(docker create "$GAME_IMAGE")"
-          mkdir -p "$RUNNER_TEMP/game"
-          docker cp "$cid:/game/RimWorldLinux_Data" "$RUNNER_TEMP/game/RimWorldLinux_Data"
-          docker rm -f "$cid"
+          echo "GameVersion=${{ matrix.version }}" >> "$GITHUB_ENV"
+          echo "$MANAGED_PROPERTY=$MANAGED_DIR" >> "$GITHUB_ENV"
 
       - name: Build against the real game assemblies
-        if: inputs.game-image != ''
         run: >
           dotnet build ${{ inputs.solution }} -c Release --nologo
-          "-p:${{ inputs.game-managed-property }}=$RUNNER_TEMP/game/RimWorldLinux_Data/Managed"
-
-      - name: Build
-        run: dotnet build ${{ inputs.solution }} -c Release --nologo
+          -p:GameVersion=${{ matrix.version }}
+          "-p:${{ inputs.game-managed-property }}=${{ steps.refs.outputs.managed-dir }}"
 
       - name: Upload build output
         if: inputs.artifact-name != ''
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ inputs.artifact-name }}
+          name: ${{ inputs.artifact-name }} ${{ matrix.version }}
           if-no-files-found: error
           path: ${{ inputs.artifact-paths }}
 
@@ -110,7 +161,7 @@ jobs:
         if: always() && inputs.test
         uses: dorny/test-reporter@v3
         with:
-          name: ${{ inputs.results-name }}
+          name: ${{ inputs.results-name }} ${{ matrix.version }}
           path: ${{ runner.temp }}/test-results/*.trx
           reporter: dotnet-trx
           fail-on-error: false

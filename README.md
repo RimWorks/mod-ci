@@ -27,10 +27,10 @@ only in repos that publish to the Steam Workshop.
 | Module | `writeStamp` | Writes `About/PublishStamp.txt` with the versions the mod was built against |
 | Module | `bumpWorkshop` | Stages the mod and pushes it to its Workshop item |
 | Module | `packageMod` | Stages a mod the way Steam does and zips it |
-| Module | `missingFromReleaseZip` | Finds mod folders the GitHub release zip drops |
+| Module | `versionFolderMismatch` | Compares `loadFolders.xml` against the version folders on disk |
 | Module | `buildReleasePayload` | Builds the Discord embed for a published release |
 | CLI | `package-mod` | Builds the release zip from `.steamignore` |
-| CLI | `verify-ship-list` | Checks a repo's release zip includes every mod content directory |
+| CLI | `verify-ship-list` | Checks every version `loadFolders.xml` claims was built, and no more |
 | CLI | `discord-release` | Posts the release embed to a webhook |
 | Workflow | `assetbundles` | Builds Unity asset bundles and uploads one zip per mod |
 | Workflow | `codeql` | GitHub code scanning |
@@ -40,13 +40,14 @@ only in repos that publish to the Steam Workshop.
 | Workflow | `links` | Checks markdown links with lychee |
 | Workflow | `node-build` | Builds a Node subproject and uploads its output |
 | Workflow | `pickle-suite` | Plays a Pickle suite against the game in a container |
+| Workflow | `package-deps` | Fails a package whose nuspec declares a reference-assembly dependency |
 | Workflow | `prose` | Runs Vale on documentation |
-| Workflow | `ship-list` | Runs `verify-ship-list` against the caller |
 | Workflow | `sonar` | SonarCloud scan for a .NET mod |
 | Workflow | `sonar-scan` | SonarCloud scan for a repo with no .NET solution |
 | Workflow | `test` | Installs Node and runs `npm test` |
 | Action | `discord-release` | Announces a release in Discord |
 | Action | `dotnet-sonar` | Build, analyzer gate, tests and coverage inside a Sonar scan |
+| Action | `stage-game-refs` | Pulls a game image and lays its managed assemblies out to compile against |
 | Action | `stage-mods` | Stages a mod, its dependencies and the `ModsConfig` the game boots with |
 | Action | `steam-login` | Installs SteamCMD and restores a logged-in config |
 | Action | `steam-republish` | Pushes an already-built mod to its Workshop item |
@@ -74,7 +75,8 @@ await writeStamp({ solution: 'RimWorks.RimLogging.sln' });
 ```
 
 The stamp reads `VERIFIED_COMMIT` and `VERIFIED_TESTS` from the environment when they are set.
-Omit `solution` and the stamp still writes, but without the package table.
+Omit `solution` and the stamp still writes, but without the package table. Pass `refsDir`, the
+staged `Managed` directory, and the table leads with the game build read out of its `Version.txt`.
 
 ### `packageMod`
 
@@ -94,8 +96,15 @@ Pushes the mod to Steam with a fresh stamp. Weekly verification runs call it.
 ```js
 import { bumpWorkshop } from '@rimworks/mod-ci';
 
-await bumpWorkshop({ workshopId: '3733484696', solution: 'RimWorks.RimLogging.sln' });
+await bumpWorkshop({
+  workshopId: '3733484696',
+  solution: 'RimWorks.RimLogging.sln',
+  refsDir: process.env.GameManagedDir,
+});
 ```
+
+Pass `refsDir` to get the RimWorld line in the stamp. Without it the stamp lists the packages and
+says nothing about which game build was verified.
 
 It needs `STEAMCMD_PATH`, `STEAM_USERNAME` and `STEAM_CONFIG_VDF`. It does not set the title, preview
 image or visibility. The Workshop page keeps what it already has.
@@ -116,34 +125,33 @@ npx package-mod Pickle ${nextRelease.version}
 It writes `dist/Pickle-1.2.3.zip`, containing a `Pickle/` folder a player drops straight into
 `RimWorld/Mods`. Point the `@semantic-release/github` asset at `dist/Pickle-*.zip`.
 
-The file list comes from `.steamignore`, the same list SteamCMD uploads through. There is no second
-allowlist to drift from the first, which is the failure `verify-ship-list` exists
-to catch. `README.md` is the one exception, put back because Steam drops it in favour of the
-Workshop description and the downloaded zip has to include it.
+The file list comes from `.steamignore`, the same list SteamCMD uploads through, so there is no
+second allowlist to drift from the first. `README.md` is the one exception, put back because Steam
+drops it in favour of the Workshop description and the downloaded zip has to include it.
 
 It exits `1` when the directory has no `.steamignore` or no `About/About.xml`.
 
 ### `verify-ship-list`
 
-Steam and GitHub select different file sets:
+`loadFolders.xml` decides which game version loads which folder. It is the only list of the
+versions a mod claims, so it is the thing to check the build against:
 
-| Channel | Mechanism | Failure mode |
-|---|---|---|
-| Steam | Copies the mod folder, `.steamignore` **excludes** | Publishes too much |
-| GitHub | `cp -r <allowlist>` in `release.config.mjs` **includes** | Publishes too little, silently |
+| Direction | Failure mode |
+|---|---|
+| `<v1.5>` declared, no `1.5/` built | RimWorld falls back to the root and the mod loads no assemblies |
+| `1.4/` on disk, no `<v1.4>` block | Nothing loads it, so it is dead weight in the zip and on Steam |
 
-Add an asset folder and Steam picks it up. The GitHub zip drops it, and nothing reports an error.
-RimLogging published eight releases without `Textures/` this way. The log viewer could not load
-its own button art, and the failure only appeared in a downstream repo's test run.
-
-Run it against a repo root:
+Run it against a repo root, after the build and before `package-mod`:
 
 ```bash
 npx verify-ship-list .
 ```
 
-It exits `1` and names the folders when the `cp -r` step misses one that exists in the repo. A
-`release.config.mjs` with no `cp -r ... dist/` step exits `0`, because there is no zip to check.
+It exits `1` and names the versions in either direction, and `2` when there is no
+`loadFolders.xml` or the file declares no `<vX.Y>` block at all.
+
+The version folders are build output, so a checkout with nothing built fails every declared
+version. That is the point: a release that only built 1.6 must not publish as 1.5 and 1.6.
 
 ### `discord-release`
 
@@ -177,8 +185,8 @@ these has to grant the scopes at each hop.
 | `links` | `contents: read` |
 | `node-build` | `contents: read` |
 | `pickle-suite` | `contents: read`, `packages: write`, `actions: read` |
+| `package-deps` | `contents: read`, `packages: read` |
 | `prose` | `contents: read` |
-| `ship-list` | `contents: read` |
 | `sonar` | `contents: read`, `packages: read` |
 | `sonar-scan` | `contents: read` |
 | `test` | `contents: read` |
@@ -257,6 +265,55 @@ jobs:
   automerge:
     uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@v1
 ```
+
+### `dotnet-build`
+
+Builds, tests, publishes the results and checks formatting, once per game version. Every leg gets
+its own game image, so 1.5 never compiles against 1.6 assemblies.
+
+`game-image.yml` returns one `image-ref`, and a matrix inside a reusable workflow cannot emit a
+map. So the caller calls it once per version and composes the `game-images` pairs:
+
+```yaml
+jobs:
+  image-15:
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v1
+    permissions:
+      contents: read
+      packages: write
+    with:
+      branch: version-1.5
+    secrets: inherit
+
+  image-16:
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v1
+    permissions:
+      contents: read
+      packages: write
+    with:
+      branch: version-1.6.4633
+    secrets: inherit
+
+  build:
+    needs: [image-15, image-16]
+    uses: RimWorks/mod-ci/.github/workflows/dotnet-build.yml@v1
+    permissions:
+      contents: read
+      checks: write
+      packages: read
+    with:
+      solution: Pickle.slnx
+      game-images: |
+        1.5=${{ needs.image-15.outputs.image-ref }}
+        1.6=${{ needs.image-16.outputs.image-ref }}
+```
+
+A `game-images` line that is not `<version>=<image ref>`, a repeated version, or an empty list
+fails the `prepare` job before any leg starts. A skipped image job leaves the ref empty, which
+reads as a malformed line and fails the same way, rather than building the wrong assemblies.
+
+`GameVersion` and the staged `Managed` directory reach msbuild through the environment as well as
+`-p:`, because `dotnet format` takes no `-p:` and still resolves references.
 
 ### `links`
 
@@ -395,17 +452,9 @@ after it, such as a docs catalogue check.
     uses: RimWorks/mod-ci/.github/workflows/prose.yml@v1
 ```
 
-### `ship-list`
-
-Runs `verify-ship-list` against the caller's repo. It checks out mod-ci separately. The caller
-does not need a dependency on this package.
-
-```yaml
-  ship-list:
-    uses: RimWorks/mod-ci/.github/workflows/ship-list.yml@v1
-```
-
-`ref` selects the mod-ci commit the checker runs from.
+A multi-version mod runs the `verify-ship-list` CLI in `prepareCmd`, after the last
+`dotnet build`. There is no workflow for it: a bare checkout cannot see the version folders a
+build produces, so a job that only checks out has nothing to compare.
 
 ### `sonar`
 
@@ -416,13 +465,19 @@ something first.
 
 ```yaml
   sonar:
+    needs: image
     uses: RimWorks/mod-ci/.github/workflows/sonar.yml@v1
     with:
       solution: RimWorks.RimLogging.sln
       project-key: RimWorks_rimworld-logging-framework
+      game-image: ${{ needs.image.outputs.image-ref }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
+
+`game-image` is required. The scan runs a plain `dotnet build`, the real game assemblies are the
+only reference set, and one version is enough for a scan. Call `game-image.yml` first and pass its
+`image-ref`. `game-version` picks the `RW_*` constant and defaults to `1.6`.
 
 The job skips itself for `dependabot[bot]`. A dependabot pull request does not get repository
 secrets, and the scan cannot authenticate with an empty token.
@@ -506,6 +561,26 @@ the test project at the net10.0 build. `net472` stays the only build the game lo
 The analyzer gate runs `dotnet format analyzers --severity info`. MSTest and CA rules default to
 info severity, which `dotnet build` never prints. Without the gate a human first sees them as a
 SonarCloud issue days later. Pass `analyzer-severity: none` to skip it.
+
+### `stage-game-refs`
+
+Pulls a RimWorld game image and copies its managed assemblies onto the runner, with `Version.txt`
+beside them. `dotnet-build` calls it once per matrix leg, so use it directly only in a job that
+builds a mod outside that workflow.
+
+```yaml
+      - uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v1
+        id: refs
+        with:
+          image: ${{ needs.image-16.outputs.image-ref }}
+```
+
+The calling job needs `packages: read` and a `GITHUB_TOKEN`; an action cannot grant either. Pass
+`token` only when the default `github.token` cannot read the image.
+
+`managed-dir` is the staged directory. Hand it to msbuild as `GameManagedDir` and to `writeStamp`
+as `refsDir`. `Version.txt` sits in it rather than at the game root, which is the layout a local
+`gamecrate` refs directory has, so one path means one thing in both places.
 
 ### `steam-login`
 

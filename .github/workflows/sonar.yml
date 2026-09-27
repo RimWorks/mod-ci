@@ -67,6 +67,16 @@ on:
         description: Lockfile the node cache keys on
         type: string
         default: ''
+      game-image:
+        description: >
+          Game image to compile against, as produced by game-image.yml. Required: the scan builds
+          the solution, and there is no reference-package fallback. Linux images only.
+        type: string
+        required: true
+      game-version:
+        description: Version the scan compiles as. Picks the RW_* constant.
+        type: string
+        default: '1.6'
     secrets:
       # matches the repo secret name. secret names cannot contain a hyphen.
       SONAR_TOKEN:
@@ -115,6 +125,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ${{ inputs.pre-scan-command }}
+
+      - name: Stage game assemblies
+        id: refs
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v1
+        with:
+          image: ${{ inputs.game-image }}
+
+      # the scanner's build, its analyzer gate and its tests all resolve references, and
+      # dotnet format takes no -p:, so both properties go where msbuild reads them anyway
+      - name: Point msbuild at the refs
+        shell: bash
+        env:
+          GAME_VERSION: ${{ inputs.game-version }}
+          MANAGED_DIR: ${{ steps.refs.outputs.managed-dir }}
+        run: |
+          echo "GameVersion=$GAME_VERSION" >> "$GITHUB_ENV"
+          echo "GameManagedDir=$MANAGED_DIR" >> "$GITHUB_ENV"
 
       # sha rather than ./ because a called workflow only has the caller's repo checked out
       - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@0be60da5b15755db2fde5ea99d2eaa7d519e79e7 # test-command

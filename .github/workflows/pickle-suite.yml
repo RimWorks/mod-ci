@@ -35,7 +35,7 @@ on:
         type: string
         default: ''
       game-version:
-        description: "<version> written into ModsConfig.xml. Not derived from the image."
+        description: "<version> written into ModsConfig.xml, and the GameVersion the build compiles as. Not derived from the image."
         type: string
         default: '1.6'
       backends:
@@ -261,8 +261,20 @@ jobs:
             gh run download "$GITHUB_RUN_ID" --name "$name" --dir "$dest"
           done <<< "$BUILD_ARTIFACTS"
 
+      # the build resolves the real game assemblies, and the container's image is the same
+      # version the mod has to compile against
+      - name: Stage game assemblies
+        id: refs
+        if: inputs.build-command != ''
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v1
+        with:
+          image: ${{ inputs.game-image != '' && inputs.game-image || needs.game-image.outputs.image-ref }}
+
       - name: Build the mod
         if: inputs.build-command != ''
+        env:
+          GameVersion: ${{ inputs.game-version }}
+          GameManagedDir: ${{ steps.refs.outputs.managed-dir }}
         run: ${{ inputs.build-command }}
 
       - uses: RimWorks/mod-ci/.github/actions/pickle-run@v1

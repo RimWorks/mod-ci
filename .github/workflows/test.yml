@@ -18,6 +18,11 @@ jobs:
           node-version: '22'
       - run: npm test
 
-      # the checker has to work against a real consumer, not just its own fixtures
-      - name: Check this repo has no cp step to verify
-        run: node bin/verify-ship-list.mjs .
+      # three release pipelines gate on this CLI, so its exit path runs here too. mod-ci is not
+      # a mod and has no loadFolders.xml, so the check gets a throwaway one
+      - name: Check the ship-list CLI against a throwaway mod
+        run: |
+          mod="$RUNNER_TEMP/mod"
+          mkdir -p "$mod/1.6"
+          printf '<loadFolders><v1.6><li>1.6</li></v1.6></loadFolders>\n' > "$mod/loadFolders.xml"
+          node bin/verify-ship-list.mjs "$mod"

@@ -1,0 +1,52 @@
+name: stage game refs
+description: >
+  Pull a RimWorld game image and lay its managed assemblies out on disk, with Version.txt beside
+  them, the same layout gamecrate's local refs dir has. The calling job needs "packages: read"
+  and a GITHUB_TOKEN; an action cannot grant either.
+
+inputs:
+  image:
+    description: Game image to stage from, as produced by game-image.yml
+    required: true
+  token:
+    description: Token that can read packages from ghcr.io
+    default: ${{ github.token }}
+  dest:
+    description: Directory the game files are copied into
+    default: ''
+
+outputs:
+  managed-dir:
+    description: The staged Managed directory, which also holds Version.txt
+    value: ${{ steps.stage.outputs.managed-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Stage the game assemblies
+      id: stage
+      shell: bash
+      env:
+        GAME_IMAGE: ${{ inputs.image }}
+        REGISTRY_TOKEN: ${{ inputs.token }}
+        DEST: ${{ inputs.dest != '' && inputs.dest || format('{0}/game', runner.temp) }}
+      run: |
+        set -euo pipefail
+        echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        docker pull -q "$GAME_IMAGE"
+        cid="$(docker create "$GAME_IMAGE")"
+        trap 'docker rm -f "$cid" >/dev/null' EXIT
+
+        managed="$DEST/RimWorldLinux_Data/Managed"
+        mkdir -p "$managed"
+        docker cp "$cid:/game/RimWorldLinux_Data/Managed/." "$managed/"
+        # beside the dlls, not at the game root: writeStamp's refsDir and a local gamecrate
+        # refs dir then mean the same directory
+        docker cp "$cid:/game/Version.txt" "$managed/Version.txt"
+
+        [[ -f "$managed/Assembly-CSharp.dll" ]] || {
+          echo "::error::$GAME_IMAGE has no Assembly-CSharp.dll under RimWorldLinux_Data/Managed"
+          exit 1
+        }
+        echo "managed-dir=$managed" >> "$GITHUB_OUTPUT"
+        echo "staged $(ls "$managed"/*.dll | wc -l) assemblies for $(cat "$managed/Version.txt")"

@@ -19,7 +19,8 @@
     "README.md",
     "bin/",
     "index.mjs",
-    "lib/"
+    "lib/",
+    "msbuild/"
   ],
   "scripts": {
     "test": "node --test tests/*.test.mjs"
