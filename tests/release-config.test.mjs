@@ -151,3 +151,13 @@ test('the returned config is plain, so a repo can override what it does not cove
   assert.deepEqual(mine.branches, ['next']);
   assert.equal(mine.plugins, cfg.plugins);
 });
+
+test('the ! marker cuts a major, which the angular preset ignores on its own', () => {
+  const cfg = releaseConfig(base);
+  const [, opts] = cfg.plugins.find((p) => Array.isArray(p) && p[0] === '@semantic-release/commit-analyzer');
+
+  assert.ok(opts.parserOpts.breakingHeaderPattern, 'no breakingHeaderPattern, so fix!: is a patch');
+  assert.match('fix!: drop a thing', opts.parserOpts.breakingHeaderPattern);
+  assert.match('feat(api)!: rename it', opts.parserOpts.breakingHeaderPattern);
+  assert.doesNotMatch('fix: ordinary', opts.parserOpts.breakingHeaderPattern);
+});

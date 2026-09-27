@@ -63,6 +63,9 @@ export default releaseConfig({
 
 An empty `workshopId` drops the Steam plugin, so a mod without a Workshop item still releases.
 
+The commit analyzer gets a `breakingHeaderPattern`. The angular preset ignores the `!` marker,
+so `fix!: drop a thing` reads as a plain patch without it. With it, `!` cuts a major.
+
 ## Order of the prepare step
 
 The function fixes this order, because each step depends on the one before it:
