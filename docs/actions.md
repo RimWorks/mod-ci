@@ -69,6 +69,9 @@ its own Steam step.
 Pass `steam-username` to log in up front. A stale config then fails in this step instead of partway
 through a publish.
 
+`STEAM_CONFIG_VDF` is the path of the restored file, not its contents. `semantic-release-steam` opens
+that path, so a job that sets the variable itself from a secret makes the upload fail.
+
 ## `steam-republish`
 
 Pushes an already-built mod to its Steam Workshop item. Used by `weekly-verify`, where the run
