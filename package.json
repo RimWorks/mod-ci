@@ -13,7 +13,8 @@
     "package-mod": "./bin/package-mod.mjs",
     "verify-ship-list": "./bin/verify-ship-list.mjs",
     "write-stamp": "./bin/write-stamp.mjs",
-    "workshop-bump": "./bin/workshop-bump.mjs"
+    "workshop-bump": "./bin/workshop-bump.mjs",
+    "build-mod": "./bin/build-mod.mjs"
   },
   "files": [
     ".github/actions/",
