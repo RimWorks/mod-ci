@@ -6,8 +6,11 @@ name: game image
 on:
   workflow_call:
     inputs:
-      branch:
-        description: Steam branch to download, for example version-1.6.4871
+      branches:
+        description: >
+          Newline separated "<game version>=<steam branch>" pairs, one per version to build, so
+          a line reads "1.6=version-1.6.4871". Each leg is its own image, and the caller gets a
+          JSON map back rather than one ref it has to guess a version for.
         type: string
         required: true
       app-id:
@@ -42,26 +45,62 @@ on:
       STEAM_CONFIG_VDF_B64:
         required: false
     outputs:
-      image-ref:
-        description: Image ref a build job should pull.
-        value: ${{ jobs.image.outputs.image-ref }}
-      skipped:
-        description: True when the Steam buildid had not moved and nothing was rebuilt.
-        value: ${{ jobs.image.outputs.skipped }}
-      windows-image-ref:
-        description: Windows image ref, empty unless windows was set.
-        value: ${{ jobs.image-windows.outputs.image-ref }}
+      image-refs:
+        description: >
+          JSON object of game version to image ref, for example {"1.5":"ghcr.io/o/g:a"}. Feed it
+          straight to dotnet-build.yml's game-images.
+        value: ${{ jobs.collect.outputs.image-refs }}
+      windows-image-refs:
+        description: The same map for the Windows images, empty unless windows was set.
+        value: ${{ jobs.collect.outputs.windows-image-refs }}
 
 permissions:
   contents: read
 
 jobs:
-  image:
-    name: rimworld image
+  prepare:
+    name: legs
     runs-on: ubuntu-latest
     outputs:
-      image-ref: ${{ steps.image.outputs.image-ref }}
-      skipped: ${{ steps.image.outputs.skipped }}
+      legs: ${{ steps.parse.outputs.legs }}
+    steps:
+      - name: Parse the branches list
+        id: parse
+        env:
+          BRANCHES: ${{ inputs.branches }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, re, sys
+
+          legs, seen = [], set()
+          for raw in os.environ["BRANCHES"].splitlines():
+              line = raw.strip()
+              if not line:
+                  continue
+              hit = re.fullmatch(r"(\d+\.\d+)=(\S+)", line)
+              if hit is None:
+                  print(f'::error::branches line is not "<version>=<steam branch>": {line}', file=sys.stderr)
+                  sys.exit(1)
+              version, branch = hit.groups()
+              if version in seen:
+                  print(f"::error::branches names {version} twice", file=sys.stderr)
+                  sys.exit(1)
+              seen.add(version)
+              legs.append({"version": version, "branch": branch})
+
+          if not legs:
+              print("::error::branches is empty, so there is no image to build", file=sys.stderr)
+              sys.exit(1)
+          print(f"legs={json.dumps({'include': legs})}")
+          PY
+
+  image:
+    name: rimworld image ${{ matrix.version }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.legs) }}
     permissions:
       contents: read
       packages: write
@@ -73,16 +112,29 @@ jobs:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
           app-id: ${{ inputs.app-id }}
-          branch: ${{ inputs.branch }}
+          branch: ${{ matrix.branch }}
           image: ${{ inputs.image != '' && inputs.image || format('ghcr.io/{0}/rimworld-game', github.repository_owner) }}
           include-paths: ${{ inputs.include-paths }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}
 
+
+      - name: Record the ref for the collect job
+        run: |
+          printf '{"%s":"%s"}' '${{ matrix.version }}' '${{ steps.image.outputs.image-ref }}' \
+            > "$RUNNER_TEMP/ref.json"
+
+      - name: Publish this leg's ref
+        uses: actions/upload-artifact@v7
+        with:
+          name: game-image-ref-linux-${{ matrix.version }}
+          path: ${{ runner.temp }}/ref.json
+          if-no-files-found: error
+
       - name: Report what was built
         run: |
           {
-            echo "## RimWorld game image"
+            echo "## RimWorld game image ${{ matrix.version }}"
             echo
             echo "| field | value |"
             echo "| --- | --- |"
@@ -92,14 +144,15 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   image-windows:
-    name: rimworld windows image
+    name: rimworld windows image ${{ matrix.version }}
+    needs: prepare
     if: inputs.windows
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.legs) }}
     # a windows leg is a bonus platform, so losing it does not fail the caller's run
     continue-on-error: true
-    outputs:
-      image-ref: ${{ steps.image.outputs.image-ref }}
-      skipped: ${{ steps.image.outputs.skipped }}
     permissions:
       contents: read
       packages: write
@@ -111,7 +164,7 @@ jobs:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
           app-id: ${{ inputs.app-id }}
-          branch: ${{ inputs.branch }}
+          branch: ${{ matrix.branch }}
           steam-platform: windows
           base-image: ${{ inputs.windows-base-image }}
           image: ${{ inputs.image != '' && format('{0}-windows', inputs.image) || format('ghcr.io/{0}/rimworld-game-windows', github.repository_owner) }}
@@ -119,10 +172,23 @@ jobs:
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}
 
+
+      - name: Record the ref for the collect job
+        run: |
+          printf '{"%s":"%s"}' '${{ matrix.version }}' '${{ steps.image.outputs.image-ref }}' \
+            > "$RUNNER_TEMP/ref.json"
+
+      - name: Publish this leg's ref
+        uses: actions/upload-artifact@v7
+        with:
+          name: game-image-ref-windows-${{ matrix.version }}
+          path: ${{ runner.temp }}/ref.json
+          if-no-files-found: error
+
       - name: Report what was built
         run: |
           {
-            echo "## RimWorld Windows game image"
+            echo "## RimWorld Windows game image ${{ matrix.version }}"
             echo
             echo "| field | value |"
             echo "| --- | --- |"
@@ -130,3 +196,37 @@ jobs:
             echo "| steam buildid | ${{ steps.image.outputs.buildid }} |"
             echo "| rebuilt | ${{ steps.image.outputs.skipped == 'true' && 'no, buildid unchanged' || 'yes' }} |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  collect:
+    name: image refs
+    needs: [prepare, image]
+    # always(): a windows leg is allowed to fail, and the linux map still has to reach the caller
+    if: always() && needs.image.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      image-refs: ${{ steps.merge.outputs.image-refs }}
+      windows-image-refs: ${{ steps.merge.outputs.windows-image-refs }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: game-image-ref-*
+          path: refs
+
+      - name: Merge the legs into one map
+        id: merge
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, pathlib, sys
+
+          maps = {"linux": {}, "windows": {}}
+          for d in sorted(pathlib.Path("refs").glob("game-image-ref-*")):
+              kind = d.name.split("-")[3]
+              for f in d.glob("*.json"):
+                  maps[kind].update(json.loads(f.read_text()))
+
+          if not maps["linux"]:
+              print("::error::no linux image refs were published", file=sys.stderr)
+              sys.exit(1)
+          print(f"image-refs={json.dumps(maps['linux'], sort_keys=True)}")
+          print(f"windows-image-refs={json.dumps(maps['windows'], sort_keys=True)}")
+          PY

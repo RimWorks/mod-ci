@@ -89,6 +89,64 @@ const { zipPath, entries } = await packageMod({ name: 'Pickle', version: '1.2.3'
 Returns the zip path and the top-level names that went in. Takes `modPath` for a repo that holds
 several mods, and `outDir` when `dist` is taken.
 
+### `releaseConfig`
+
+The whole semantic-release config for a mod repo. A repo declares what it contains. The function
+decides how the release runs.
+
+```js
+import { readFileSync } from 'node:fs';
+
+import { declaredVersions, releaseConfig } from '@rimworks/mod-ci';
+
+export default releaseConfig({
+  solution: 'Quickstarts.slnx',
+  versions: declaredVersions(readFileSync('loadFolders.xml', 'utf8')),
+  mods: [{ name: 'Quickstarts', workshopId: '3793646067' }],
+  pack: 'Source/Quickstarts.Ref/Quickstarts.Ref.csproj',
+  nupkgGlob: 'artifacts/RimWorks.Quickstarts.Ref.${nextRelease.version}.nupkg',
+});
+```
+
+| Option | Type | Default | What it does |
+| --- | --- | --- | --- |
+| `solution` | string | required | Solution or project the release builds. |
+| `versions` | string[] | required | Game versions to build. Read them from `loadFolders.xml` with `declaredVersions`. |
+| `mods` | object[] | required | One entry per mod in the repo. Each takes `name`, `workshopId`, and an optional `previewfile`. |
+| `branches` | array | `['main']` | Passed to semantic-release. |
+| `extraRules` | object[] | `[]` | Extra `releaseRules`, added before the shared set. |
+| `beforeBuild` | string[] | `[]` | Commands to run before the first build, such as a frontend bundle. |
+| `pack` | string | none | Project to pack as a NuGet package. Without it the release packs nothing. |
+| `packArgs` | string | `''` | Extra MSBuild arguments for the pack step. |
+| `packOut` | string | `artifacts` | Output directory for the package. |
+| `nupkgGlob` | string | none | Package to push. Without it the release publishes nothing to NuGet. |
+| `assets` | object[] | `[]` | Files to attach to the GitHub release. |
+
+An empty `workshopId` drops the Steam plugin, so a mod without a Workshop item still releases.
+
+#### Order of the prepare step
+
+The function fixes this order, because each step depends on the one before it:
+
+1. `beforeBuild`
+2. One `dotnet build` per version, each against that version's own assemblies.
+3. `verify-ship-list`, which compares `loadFolders.xml` to the folders that were built.
+4. `write-stamp`, which reads resolved package versions and so needs a restore first.
+5. `dotnet pack`, when `pack` is set.
+6. `package-mod`, once per mod.
+
+#### Overriding the result
+
+The return value is a plain object. Spread it and override the part you need:
+
+```js
+const config = releaseConfig({ ...ordinary });
+
+export default { ...config, branches: ['next'] };
+```
+
+Prefer that over a new option. An option that one repo uses costs every reader of this file.
+
 ### `bumpWorkshop`
 
 Pushes the mod to Steam with a fresh stamp. Weekly verification runs call it.
@@ -131,6 +189,40 @@ drops it in favour of the Workshop description and the downloaded zip has to inc
 
 It exits `1` when the directory has no `.steamignore` or no `About/About.xml`.
 
+### `build-mod`
+
+Builds once per version that `loadFolders.xml` declares, each against that version's own
+assemblies. It runs the same commands `releaseConfig` assembles, so a weekly verification run and
+a release build the same way.
+
+```bash
+npx build-mod Pickle.slnx --nologo
+```
+
+Extra arguments go to every `dotnet build`. Do not pass `-c`, the command already sets it.
+
+### `write-stamp`
+
+Writes `About/PublishStamp.txt` for the newest version the mod declares.
+
+```bash
+npx write-stamp Pickle.slnx
+```
+
+It finds the assemblies through `GAME_MANAGED_1_6`, which `stage-game-refs` exports, and falls
+back to the local gamecrate cache.
+
+### `workshop-bump`
+
+Stages the mod and pushes it to its Workshop item, with a fresh stamp.
+
+```bash
+npx workshop-bump Pickle.slnx 3791648678
+```
+
+The id can come from `WORKSHOP_ID` instead. It needs `STEAMCMD_PATH`, `STEAM_USERNAME` and
+`STEAM_CONFIG_VDF`, which the `steam-republish` action sets.
+
 ### `verify-ship-list`
 
 `loadFolders.xml` decides which game version loads which folder. It is the only list of the
@@ -138,8 +230,8 @@ versions a mod claims, so it is the thing to check the build against:
 
 | Direction | Failure mode |
 |---|---|
-| `<v1.5>` declared, no `1.5/` built | RimWorld falls back to the root and the mod loads no assemblies |
-| `1.4/` on disk, no `<v1.4>` block | Nothing loads it, so it is dead weight in the zip and on Steam |
+| `<v1.5>` declared, no `1.5/` built | RimWorld falls back to the root, so the mod doesn't load its assemblies |
+| `1.4/` on disk, no `<v1.4>` block | RimWorld never reads it, so the zip and Steam carry dead weight |
 
 Run it against a repo root, after the build and before `package-mod`:
 
@@ -150,8 +242,8 @@ npx verify-ship-list .
 It exits `1` and names the versions in either direction, and `2` when there is no
 `loadFolders.xml` or the file declares no `<vX.Y>` block at all.
 
-The version folders are build output, so a checkout with nothing built fails every declared
-version. That is the point: a release that only built 1.6 must not publish as 1.5 and 1.6.
+The version folders are build output. A fresh checkout fails every declared version, which keeps
+a release that only built 1.6 from publishing as 1.5 and 1.6.
 
 ### `discord-release`
 
@@ -310,7 +402,7 @@ jobs:
 
 A `game-images` line that is not `<version>=<image ref>`, a repeated version, or an empty list
 fails the `prepare` job before any leg starts. A skipped image job leaves the ref empty, which
-reads as a malformed line and fails the same way, rather than building the wrong assemblies.
+reads as a malformed line and fails the same way.
 
 `GameVersion` and the staged `Managed` directory reach msbuild through the environment as well as
 `-p:`, because `dotnet format` takes no `-p:` and still resolves references.
@@ -575,7 +667,7 @@ builds a mod outside that workflow.
           image: ${{ needs.image-16.outputs.image-ref }}
 ```
 
-The calling job needs `packages: read` and a `GITHUB_TOKEN`; an action cannot grant either. Pass
+The calling job needs `packages: read` and a `GITHUB_TOKEN`. An action cannot grant either. Pass
 `token` only when the default `github.token` cannot read the image.
 
 `managed-dir` is the staged directory. Hand it to msbuild as `GameManagedDir` and to `writeStamp`

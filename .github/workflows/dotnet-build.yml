@@ -40,19 +40,13 @@ on:
         default: ''
       game-images:
         description: >
-          Newline separated "<version>=<image ref>" pairs, one per version to build, so a line
-          reads "1.5=ghcr.io/rimworks/rimworld-game:1.5.4409". Each leg compiles against its own
-          image, which is what keeps a version and its assemblies from drifting apart. Required:
-          there is no reference-package fallback. A malformed line, a duplicate version or an
-          empty list fails the run.
-
-
-          A caller gets N refs by calling game-image.yml once per version and composing the
-          pairs from its outputs. game-image.yml returns one image-ref and a matrix inside a
-          reusable workflow cannot emit a map, so composing in the caller is the shape that
-          works. The dotnet-build section of mod-ci's README has the job block to copy.
+          JSON object of game version to image ref, as game-image.yml returns, for example
+          {"1.5":"ghcr.io/o/rimworld-game:a"}. Each leg compiles against its own image, which is
+          what keeps a version and its assemblies from drifting apart. Required: there is no
+          reference-package fallback.
         type: string
         required: true
+
       game-managed-property:
         description: MSBuild property that receives the staged Managed directory.
         type: string
@@ -76,28 +70,24 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os, re, sys
 
-          legs, seen = [], set()
-          for raw in os.environ["GAME_IMAGES"].splitlines():
-              line = raw.strip()
-              if not line:
-                  continue
-              hit = re.fullmatch(r"(\d+\.\d+)=(\S+)", line)
-              if not hit:
-                  print(f'::error::game-images line is not "<version>=<image ref>": {line}', file=sys.stderr)
-                  sys.exit(1)
-              version, image = hit.groups()
-              if version in seen:
-                  print(f"::error::game-images names {version} twice", file=sys.stderr)
-                  sys.exit(1)
-              seen.add(version)
-              legs.append({"version": version, "image": image})
-
-          if not legs:
-              print("::error::game-images is empty, so this build would compile nothing", file=sys.stderr)
+          try:
+              refs = json.loads(os.environ["GAME_IMAGES"])
+          except json.JSONDecodeError as err:
+              print(f"::error::game-images is not JSON: {err}", file=sys.stderr)
               sys.exit(1)
 
-          print("building " + ", ".join(f"{l['version']} from {l['image']}" for l in legs), file=sys.stderr)
-          print("legs=" + json.dumps({"include": legs}))
+          if not isinstance(refs, dict) or not refs:
+              print("::error::game-images is empty, so there is no version to build", file=sys.stderr)
+              sys.exit(1)
+
+          legs = []
+          for version, image in sorted(refs.items()):
+              if re.fullmatch(r"\d+\.\d+", version) is None or not str(image).strip():
+                  print(f'::error::game-images has a bad entry: {version!r}: {image!r}', file=sys.stderr)
+                  sys.exit(1)
+              legs.append({"version": version, "image": image})
+
+          print(f"legs={json.dumps({'include': legs})}")
           PY
 
   build:
