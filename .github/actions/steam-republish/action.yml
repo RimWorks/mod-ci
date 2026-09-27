@@ -17,9 +17,9 @@ inputs:
   verified-tests:
     description: Passing test count, quoted in the changenote
     default: ''
-  script:
-    description: Node entry point that stages and pushes
-    default: scripts/workshop-bump.mjs
+  solution:
+    description: Solution the stamp reads its package versions from
+    required: true
 
 runs:
   using: composite
@@ -55,4 +55,4 @@ runs:
         VERIFIED_COMMIT: ${{ github.sha }}
         VERIFIED_RIMWORLD: ${{ inputs.verified-rimworld }}
         VERIFIED_TESTS: ${{ inputs.verified-tests }}
-      run: node "${{ inputs.script }}"
+      run: npx workshop-bump "${{ inputs.solution }}"
