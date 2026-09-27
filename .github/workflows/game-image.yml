@@ -127,8 +127,8 @@ jobs:
 
       - name: Record the ref for the collect job
         run: |
-          printf '{"%s":"%s"}' '${{ matrix.version }}' '${{ steps.image.outputs.image-ref }}' \
-            > "$RUNNER_TEMP/ref.json"
+          printf '{"kind":"linux","version":"%s","ref":"%s"}' \
+            '${{ matrix.version }}' '${{ steps.image.outputs.image-ref }}' > "$RUNNER_TEMP/ref.json"
 
       - name: Publish this leg's ref
         uses: actions/upload-artifact@v7
@@ -181,8 +181,8 @@ jobs:
 
       - name: Record the ref for the collect job
         run: |
-          printf '{"%s":"%s"}' '${{ matrix.version }}' '${{ steps.image.outputs.image-ref }}' \
-            > "$RUNNER_TEMP/ref.json"
+          printf '{"kind":"windows","version":"%s","ref":"%s"}' \
+            '${{ matrix.version }}' '${{ steps.image.outputs.image-ref }}' > "$RUNNER_TEMP/ref.json"
 
       - name: Publish this leg's ref
         uses: actions/upload-artifact@v7
@@ -227,10 +227,9 @@ jobs:
           import json, os, pathlib, sys
 
           maps = {"linux": {}, "windows": {}}
-          for d in sorted(pathlib.Path("refs").glob(os.environ["PREFIX"] + "-*")):
-              kind = d.name.rsplit("-", 2)[1]
-              for f in d.glob("*.json"):
-                  maps[kind].update(json.loads(f.read_text()))
+          for f in sorted(pathlib.Path("refs").rglob("*.json")):
+              leg = json.loads(f.read_text())
+              maps[leg["kind"]][leg["version"]] = leg["ref"]
 
           if not maps["linux"]:
               print(f"::error::no linux refs under prefix {os.environ['PREFIX']}. Another caller "
