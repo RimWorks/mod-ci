@@ -27,6 +27,12 @@ on:
           leave it empty for an image the game can actually run from.
         type: string
         default: ''
+      artifact-prefix:
+        description: >
+          Names the per-leg ref artifacts. A workflow that calls this twice in one run has to
+          give each call its own prefix, or the two sets collide and the map comes back empty.
+        type: string
+        default: game-image-ref
       force:
         description: Rebuild even when the Steam buildid has not moved.
         type: boolean
@@ -127,7 +133,7 @@ jobs:
       - name: Publish this leg's ref
         uses: actions/upload-artifact@v7
         with:
-          name: game-image-ref-linux-${{ matrix.version }}
+          name: ${{ inputs.artifact-prefix }}-linux-${{ matrix.version }}
           path: ${{ runner.temp }}/ref.json
           if-no-files-found: error
 
@@ -181,7 +187,7 @@ jobs:
       - name: Publish this leg's ref
         uses: actions/upload-artifact@v7
         with:
-          name: game-image-ref-windows-${{ matrix.version }}
+          name: ${{ inputs.artifact-prefix }}-windows-${{ matrix.version }}
           path: ${{ runner.temp }}/ref.json
           if-no-files-found: error
 
@@ -209,18 +215,20 @@ jobs:
     steps:
       - uses: actions/download-artifact@v7
         with:
-          pattern: game-image-ref-*
+          pattern: ${{ inputs.artifact-prefix }}-*
           path: refs
 
       - name: Merge the legs into one map
         id: merge
+        env:
+          PREFIX: ${{ inputs.artifact-prefix }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json, pathlib, sys
+          import json, os, pathlib, sys
 
           maps = {"linux": {}, "windows": {}}
-          for d in sorted(pathlib.Path("refs").glob("game-image-ref-*")):
-              kind = d.name.split("-")[3]
+          for d in sorted(pathlib.Path("refs").glob(os.environ["PREFIX"] + "-*")):
+              kind = d.name.rsplit("-", 2)[1]
               for f in d.glob("*.json"):
                   maps[kind].update(json.loads(f.read_text()))
 

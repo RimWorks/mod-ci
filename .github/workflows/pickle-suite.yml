@@ -266,7 +266,7 @@ jobs:
       - name: Stage game assemblies
         id: refs
         if: inputs.build-command != ''
-        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v1
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v2
         with:
           image: ${{ inputs.game-image != '' && inputs.game-image || needs.game-image.outputs.image-ref }}
 
@@ -277,7 +277,7 @@ jobs:
           GameManagedDir: ${{ steps.refs.outputs.managed-dir }}
         run: ${{ inputs.build-command }}
 
-      - uses: RimWorks/mod-ci/.github/actions/pickle-run@v1
+      - uses: RimWorks/mod-ci/.github/actions/pickle-run@v2
         with:
           game-image: ${{ inputs.game-image != '' && inputs.game-image || needs.game-image.outputs.image-ref }}
           mod-name: ${{ inputs.mod-name }}
