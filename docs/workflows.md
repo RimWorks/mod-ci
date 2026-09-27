@@ -161,6 +161,7 @@ images:
     contents: read
     packages: write
   with:
+    artifact-prefix: ci-image-ref
     branches: |
       1.5=version-1.5
       1.6=version-1.6.4633
@@ -170,6 +171,7 @@ images:
 | Input | Default | What it does |
 | --- | --- | --- |
 | `branches` | required | Newline `<game version>=<steam branch>` pairs. One image per line. |
+| `artifact-prefix` | required | Names the per-leg ref artifacts. Two calls in one run that share it collide. |
 | `app-id` | `294100` | Steam app id. |
 | `image` | owner namespace | Repository to push to. |
 | `include-paths` | all | Limits the image. `Managed` alone compiles, but the game cannot run. |
