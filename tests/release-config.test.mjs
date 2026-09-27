@@ -7,6 +7,7 @@ import {
   buildVersions,
   nugetPush,
   refsDirFor,
+  releaseConfig,
   steamMod,
 } from '../lib/release-config.mjs';
 
@@ -107,4 +108,46 @@ test('one version with GameManagedDir is still allowed', () => {
   } finally {
     clearRefsEnv();
   }
+});
+
+const base = {
+  solution: 'X.slnx',
+  versions: ['1.5', '1.6'],
+  mods: [{ name: 'X', workshopId: '1' }],
+};
+
+test('the prepare order builds before it stamps, and stamps before it zips', () => {
+  clearRefsEnv();
+  const cfg = releaseConfig(base);
+  const exec = cfg.plugins.find((p) => Array.isArray(p) && p[0] === '@semantic-release/exec')[1];
+  const steps = exec.prepareCmd.split(' && ');
+
+  const build = steps.findLastIndex((s) => s.startsWith('dotnet build'));
+  const stamp = steps.findIndex((s) => s.startsWith('npx write-stamp'));
+  const zip = steps.findIndex((s) => s.startsWith('npx package-mod'));
+
+  assert.ok(build < stamp, 'the stamp reads resolved versions, so it runs after the builds');
+  assert.ok(stamp < zip, 'the stamp has to be in the zip');
+});
+
+test('a repo with no pack project gets no pack step and no publishCmd', () => {
+  const cfg = releaseConfig(base);
+  const exec = cfg.plugins.find((p) => Array.isArray(p) && p[0] === '@semantic-release/exec')[1];
+
+  assert.equal(exec.prepareCmd.includes('dotnet pack'), false);
+  assert.equal('publishCmd' in exec, false);
+});
+
+test('missing pieces are errors rather than a config that releases nothing', () => {
+  assert.throws(() => releaseConfig({ ...base, solution: undefined }), /solution is required/);
+  assert.throws(() => releaseConfig({ ...base, versions: [] }), /versions is required/);
+  assert.throws(() => releaseConfig({ ...base, mods: [] }), /at least one mod/);
+});
+
+test('the returned config is plain, so a repo can override what it does not cover', () => {
+  const cfg = releaseConfig(base);
+  const mine = { ...cfg, branches: ['next'] };
+
+  assert.deepEqual(mine.branches, ['next']);
+  assert.equal(mine.plugins, cfg.plugins);
 });
