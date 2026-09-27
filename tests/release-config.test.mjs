@@ -77,3 +77,34 @@ test('the release rules cover the types that are shipped content', () => {
   assert.deepEqual(types, ['refactor', 'style', 'ci', 'docs']);
   assert.ok(MOD_RELEASE_RULES.every((r) => r.release === 'patch'));
 });
+
+test('a shared GameManagedDir across versions is refused, not silently reused', () => {
+  clearRefsEnv();
+  process.env.GameManagedDir = '/runner/game-1.6/Managed';
+  try {
+    assert.throws(
+      () => buildVersions({ solution: 'x.slnx', versions: ['1.5', '1.6'] }),
+      /GAME_MANAGED_1_5 or GAME_MANAGED_1_6/,
+    );
+
+    // once each version is staged by name, the same call is fine
+    process.env.GAME_MANAGED_1_5 = '/runner/game-1.5/Managed';
+    process.env.GAME_MANAGED_1_6 = '/runner/game-1.6/Managed';
+    const cmds = buildVersions({ solution: 'x.slnx', versions: ['1.5', '1.6'] });
+    assert.match(cmds[0], /GameManagedDir=\/runner\/game-1\.5\/Managed/);
+    assert.match(cmds[1], /GameManagedDir=\/runner\/game-1\.6\/Managed/);
+  } finally {
+    clearRefsEnv();
+  }
+});
+
+test('one version with GameManagedDir is still allowed', () => {
+  clearRefsEnv();
+  process.env.GameManagedDir = '/runner/only/Managed';
+  try {
+    const [cmd] = buildVersions({ solution: 'x.slnx', versions: ['1.6'] });
+    assert.match(cmd, /GameManagedDir=\/runner\/only\/Managed/);
+  } finally {
+    clearRefsEnv();
+  }
+});

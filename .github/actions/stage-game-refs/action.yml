@@ -19,6 +19,9 @@ outputs:
   managed-dir:
     description: The staged Managed directory, which also holds Version.txt
     value: ${{ steps.stage.outputs.managed-dir }}
+  version:
+    description: Major.minor read out of the image's own Version.txt
+    value: ${{ steps.stage.outputs.version }}
 
 runs:
   using: composite
@@ -49,4 +52,11 @@ runs:
           exit 1
         }
         echo "managed-dir=$managed" >> "$GITHUB_OUTPUT"
+
+        # the image knows its own version, so a caller cannot map the wrong one
+        version="$(sed -n 's/^\([0-9]*\.[0-9]*\).*/\1/p' "$managed/Version.txt" | head -1)"
+        [[ -n "$version" ]] || { echo "::error::no version in $managed/Version.txt"; exit 1; }
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "GAME_MANAGED_${version//./_}=$managed" >> "$GITHUB_ENV"
+
         echo "staged $(ls "$managed"/*.dll | wc -l) assemblies for $(cat "$managed/Version.txt")"
