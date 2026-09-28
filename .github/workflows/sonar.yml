@@ -103,7 +103,7 @@ jobs:
 
       - name: Setup pnpm
         if: inputs.package-manager == 'pnpm'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
@@ -140,7 +140,7 @@ jobs:
           echo "GameManagedDir=$MANAGED_DIR" >> "$GITHUB_ENV"
 
       # sha rather than ./ because a called workflow only has the caller's repo checked out
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@0be60da5b15755db2fde5ea99d2eaa7d519e79e7 # test-command
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@2b12ceb52c4db9a43964846dd92dd4eeb8cb73cb # test-command
         with:
           solution: ${{ inputs.solution }}
           project-key: ${{ inputs.project-key }}

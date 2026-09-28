@@ -113,7 +113,7 @@ jobs:
     steps:
       - name: Build the RimWorld game image
         id: image
-        uses: RimWorks/steam-game-image-action@v2
+        uses: RimWorks/steam-game-image-action@v4
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
@@ -165,7 +165,7 @@ jobs:
     steps:
       - name: Build the RimWorld Windows game image
         id: image
-        uses: RimWorks/steam-game-image-action@v2
+        uses: RimWorks/steam-game-image-action@v4
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
@@ -212,7 +212,7 @@ jobs:
       image-refs: ${{ steps.merge.outputs.image-refs }}
       windows-image-refs: ${{ steps.merge.outputs.windows-image-refs }}
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: ${{ inputs.artifact-prefix }}-*
           path: refs
