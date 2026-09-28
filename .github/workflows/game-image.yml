@@ -13,18 +13,8 @@ on:
           JSON map back rather than one ref it has to guess a version for.
         type: string
         required: true
-      app-id:
-        description: Steam app id. RimWorld is 294100.
-        type: string
-        default: '294100'
       image:
         description: Image to push. Defaults to the caller's owner namespace.
-        type: string
-        default: ''
-      include-paths:
-        description: >
-          Limit the image to these paths. Managed alone is enough to compile against;
-          leave it empty for an image the game can actually run from.
         type: string
         default: ''
       artifact-prefix:
@@ -113,14 +103,14 @@ jobs:
     steps:
       - name: Build the RimWorld game image
         id: image
-        uses: RimWorks/steam-game-image-action@v2
+        uses: RimWorks/steam-game-image-action@v4
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
-          app-id: ${{ inputs.app-id }}
           branch: ${{ matrix.branch }}
+          variant: linux
+          aliases: ${{ matrix.version }}
           image: ${{ inputs.image != '' && inputs.image || format('ghcr.io/{0}/rimworld-game', github.repository_owner) }}
-          include-paths: ${{ inputs.include-paths }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}
 
@@ -165,16 +155,15 @@ jobs:
     steps:
       - name: Build the RimWorld Windows game image
         id: image
-        uses: RimWorks/steam-game-image-action@v2
+        uses: RimWorks/steam-game-image-action@v4
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
-          app-id: ${{ inputs.app-id }}
           branch: ${{ matrix.branch }}
-          steam-platform: windows
+          variant: windows
+          aliases: ${{ matrix.version }}
           base-image: ${{ inputs.windows-base-image }}
           image: ${{ inputs.image != '' && format('{0}-windows', inputs.image) || format('ghcr.io/{0}/rimworld-game-windows', github.repository_owner) }}
-          include-paths: ${{ inputs.include-paths }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}
 

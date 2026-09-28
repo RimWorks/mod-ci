@@ -171,10 +171,8 @@ images:
 | Input | Default | What it does |
 | --- | --- | --- |
 | `branches` | required | Newline `<game version>=<steam branch>` pairs. One image per line. |
-| `artifact-prefix` | required | Names the per-leg ref artifacts. Two calls in one run that share it collide. |
-| `app-id` | `294100` | Steam app id. |
+| `artifact-prefix` | required | Names the per-leg ref artifacts. A shared prefix makes two calls in one run collide. |
 | `image` | owner namespace | Repository to push to. |
-| `include-paths` | all | Limits the image. `Managed` alone compiles, but the game cannot run. |
 | `force` | `false` | Rebuilds even when the Steam buildid has not moved. |
 | `windows` | `false` | Also builds Windows images, under the Linux name plus `-windows`. |
 
@@ -186,8 +184,13 @@ A malformed line, a repeated version or an empty list fails the `prepare` job be
 builds. The Windows legs return `outputs.windows-image-refs` and are allowed to fail without
 failing the caller.
 
-`include-paths` must list `Version.txt` if you set it. Without that file `stage-game-refs` fails,
-and the stamp has no game build to name.
+Each leg also gets a short moving tag from its version, so `1.6=version-1.6.4633` publishes
+`<image>:1.6` alongside the build-numbered tag. A consumer can pull the short ref and always get
+the newest image built for that game version.
+
+The Steam app id and the file list come from the `rimworld` gamecrate plugin, not from an input.
+The plugin's `linux` variant is a runnable image. Its `linux-ref` variant is limited to the
+managed assemblies and `Version.txt`.
 
 ## `package-deps`
 
