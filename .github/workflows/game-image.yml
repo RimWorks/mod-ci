@@ -205,8 +205,7 @@ jobs:
 
   collect:
     name: image refs
-    needs: [prepare, image]
-    # always(): a windows leg is allowed to fail, and the linux map still has to reach the caller
+    needs: [prepare, image, image-windows]
     if: always() && needs.image.result == 'success'
     runs-on: ubuntu-latest
     outputs:

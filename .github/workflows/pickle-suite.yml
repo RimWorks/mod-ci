@@ -205,7 +205,7 @@ jobs:
     needs: sets
     if: inputs.game-image == ''
     # pinned rather than ./ so the call cannot resolve against a consumer's own game-image.yml
-    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v1
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v2
     permissions:
       contents: read
       packages: write
@@ -213,7 +213,8 @@ jobs:
       STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
       STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
     with:
-      branch: ${{ inputs.game-branch }}
+      artifact-prefix: pickle-suite-image-ref
+      branches: ${{ inputs.game-version }}=${{ inputs.game-branch }}
 
   suite:
     name: suite (${{ matrix.set.name }})
@@ -268,7 +269,7 @@ jobs:
         if: inputs.build-command != ''
         uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v2
         with:
-          image: ${{ inputs.game-image != '' && inputs.game-image || needs.game-image.outputs.image-ref }}
+          image: ${{ inputs.game-image != '' && inputs.game-image || fromJSON(needs.game-image.outputs.image-refs || '{}')[inputs.game-version] }}
 
       - name: Build the mod
         if: inputs.build-command != ''
@@ -279,7 +280,7 @@ jobs:
 
       - uses: RimWorks/mod-ci/.github/actions/pickle-run@v2
         with:
-          game-image: ${{ inputs.game-image != '' && inputs.game-image || needs.game-image.outputs.image-ref }}
+          game-image: ${{ inputs.game-image != '' && inputs.game-image || fromJSON(needs.game-image.outputs.image-refs || '{}')[inputs.game-version] }}
           mod-name: ${{ inputs.mod-name }}
           mod-package-id: ${{ inputs.mod-package-id }}
           mod-dirs: ${{ inputs.mod-dirs }}
