@@ -11,7 +11,6 @@ if (!solution) {
   process.exit(2);
 }
 
-// one stamp, so it quotes the newest version the mod claims
 const newest = declaredVersions(await readFile('loadFolders.xml', 'utf8')).at(-1);
 if (!newest) {
   process.stderr.write('no <vX.Y> block in loadFolders.xml, so no version to stamp\n');

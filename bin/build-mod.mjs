@@ -16,7 +16,6 @@ if (!solution) {
 
 const versions = declaredVersions(await readFile('loadFolders.xml', 'utf8'));
 
-// the same command release.config.mjs assembles, without semantic-release's version templates
 for (const cmd of buildVersions({ solution, versions, args: extra.join(' ') })) {
   process.stdout.write(`${cmd}\n`);
   const [bin, ...args] = cmd.split(' ').filter(Boolean);

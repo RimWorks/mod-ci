@@ -11,7 +11,6 @@ if (!solution || !workshopId) {
   process.exit(2);
 }
 
-// refsDir is not optional in practice: without it the stamp names no game version
 const newest = declaredVersions(await readFile('loadFolders.xml', 'utf8')).at(-1);
 if (!newest) {
   process.stderr.write('no <vX.Y> block in loadFolders.xml, so no version to stamp\n');
