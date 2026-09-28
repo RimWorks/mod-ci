@@ -11,8 +11,6 @@ on:
 permissions:
   contents: read
 
-# no concurrency here: github.ref is the caller's, so two callers on one ref would cancel each other
-
 jobs:
   prose:
     runs-on: ubuntu-latest

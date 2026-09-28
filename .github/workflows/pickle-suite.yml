@@ -1,8 +1,5 @@
 name: pickle suite
 
-# Builds the caller's mod, plays a Pickle suite against the game in a container, and merges every
-# leg into one report. Pickle and Cosmere each carried a near-copy of this before it moved here.
-
 on:
   workflow_call:
     inputs:
@@ -95,7 +92,6 @@ on:
         type: number
         default: 0
     secrets:
-      # GITHUB_TOKEN is not declared: a called workflow reads it without one
       DOCBIN_TOKEN:
         required: false
       STEAM_USERNAME:
@@ -103,15 +99,12 @@ on:
       STEAM_CONFIG_VDF_B64:
         required: false
     outputs:
-      # no per-leg outputs: one slot per name, so the last leg to finish wins it
       report-artifact:
         description: Artifact holding the merged report, or empty when no leg reported.
         value: ${{ jobs.merge.outputs.report-artifact }}
 
 permissions:
   contents: read
-
-# no concurrency here: github.ref is the caller's, so two callers on one ref would cancel each other
 
 jobs:
   sets:
@@ -191,7 +184,6 @@ jobs:
           bad="$(jq -r '[.set[].backend | select(. != "harmony" and . != "concord" and . != "both")] | join(", ")' <<< "$matrix")"
           [[ -z "$bad" ]] || die "backend '$bad' is not harmony, concord or both"
 
-          # staging refuses these too, but only after the build and the image pull
           malformed="$(jq -r '
             [.set[] | .staged | select(. != "") | split(",")[]
              | select((split(":") | length) != 3)] | join(", ")' <<< "$matrix")"
@@ -298,7 +290,6 @@ jobs:
           run-timeout: ${{ inputs.run-timeout }}
           timeout-minutes: ${{ inputs.timeout-minutes }}
           retries: ${{ inputs.retries }}
-          # a red set is a comparison's answer. exit 2, a container that never came up, still fails
           report-only: ${{ inputs.mod-sets != '' }}
           report-dir: ${{ env.REPORT_DIR }}
 

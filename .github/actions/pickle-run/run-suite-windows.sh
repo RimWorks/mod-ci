@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# run-suite-windows.sh <image-ref> <mods-dir> <config-dir> <report-dir>
 set -euo pipefail
 
 IMAGE="${1:?usage: run-suite-windows.sh <image-ref> <mods-dir> <config-dir> <report-dir>}"
@@ -16,7 +15,6 @@ TMP="${RUNNER_TEMP:-/tmp}"
 # before any exit path: a stale log from the last attempt reads as this one's X death
 : > "$TMP/container.log"
 
-# PickleArgs.IntArg silently keeps its own 60 for a value int.TryParse refuses
 [[ -z "$RUN_TIMEOUT" || "$RUN_TIMEOUT" =~ ^[0-9]+$ ]] ||
   { echo "error: RUN_TIMEOUT is '$RUN_TIMEOUT', not a whole number" >&2; exit 1; }
 
@@ -30,7 +28,6 @@ if [[ -n "$SUITE_FILTER" ]]; then
 elif [[ "$UNFILTERED" == "true" ]]; then
   run_arg="-pickle-run"
 else
-  # an unfiltered run plays every other loaded mod's features, so the caller says so out loud
   echo "error: SUITE_FILTER is empty and UNFILTERED is not true" >&2
   exit 1
 fi

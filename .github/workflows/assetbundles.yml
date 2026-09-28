@@ -1,9 +1,5 @@
 name: asset bundles
 
-# Builds Unity asset bundles for every mod in a repo and uploads one zip per mod. A Unity
-# install costs about fifteen minutes, so the job caches the built bundles and skips the
-# install entirely on a hit. RimworldCosmere carried this verbatim before it moved here.
-
 on:
   workflow_call:
     inputs:

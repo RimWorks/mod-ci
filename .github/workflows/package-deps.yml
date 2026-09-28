@@ -1,8 +1,5 @@
 name: package deps
 
-# A reference package that reaches the nuspec gives every consumer a second copy of each game
-# type. Packing on a dev box passes for the wrong reason; a runner has no game, so it forces it.
-
 on:
   workflow_call:
     inputs:
@@ -57,7 +54,6 @@ jobs:
         env:
           PROJECT: ${{ inputs.project }}
           BANNED: ${{ inputs.reference-packages }}
-          # msbuild reads an environment variable as a property, and pack is the only step here
           GameVersion: ${{ inputs.game-version }}
           GameManagedDir: ${{ steps.refs.outputs.managed-dir }}
         run: |

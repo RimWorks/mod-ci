@@ -110,7 +110,6 @@ runs:
       shell: bash
       run: dotnet build "${{ inputs.solution }}" -c "${{ inputs.configuration }}"
 
-    # MSTEST and CA ship at info severity, which dotnet build never prints
     - name: Analyzer gate
       if: inputs.analyzer-severity != 'none'
       shell: bash
@@ -118,7 +117,6 @@ runs:
         dotnet format analyzers "${{ inputs.solution }}" \
           --severity "${{ inputs.analyzer-severity }}" --verify-no-changes --no-restore
 
-    # coverlet only records hits for a modern assembly, hence the net10.0 build
     - name: Test
       if: inputs.test-command != ''
       shell: bash

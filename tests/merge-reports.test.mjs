@@ -49,7 +49,6 @@ async function leg(root, dir, payload, counts) {
   return legDir;
 }
 
-// A leg killed mid-write leaves a report.html the payload regex cannot close.
 async function brokenLeg(root, dir, html, counts) {
   const legDir = join(root, 'sets', dir);
   await mkdir(legDir, { recursive: true });

@@ -1,15 +1,10 @@
 #!/usr/bin/env node
-// Decides pass, fail or retry after a Pickle container run. Everything it reads is in
-// summary.json, which Pickle writes last, so a fresh one means the whole report dir is.
-// argv first, then env: <report-dir> REPORT_DIR, <status> RUN_STATUS, <stamp> STAMP_FILE,
-// <container-log> CONTAINER_LOG. Exits 0 pass, 75 retry, 1 the suite failed, 2 no report to read.
 
 import { appendFileSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const EXIT_FAIL = 1;
-// a comparison leg absorbs EXIT_FAIL and nothing else, so "no report to read" needs its own code
 const EXIT_NO_REPORT = 2;
 const EXIT_RETRY = 75;
 
@@ -51,7 +46,6 @@ function tail(path, count) {
   return text.split('\n').filter(Boolean).slice(-count).join('\n');
 }
 
-// an unreadable log greps like a clean one, so a blind grep would read as "no X death"
 function xServerScan(entries) {
   let died = false;
   const unreadable = [];
@@ -70,7 +64,6 @@ function xServerScan(entries) {
   return { died, unreadable, stale };
 }
 
-// ScenarioFilter.DescribeNoMatch only ever reaches the log, so it gets lifted out here
 function filterHelp(path) {
   const text = read(path);
   if (!text) return null;
@@ -143,7 +136,6 @@ const VERDICTS = [
   { n: 5, name: 'scenarios-failed', run: ({ failed, total }) => failed === 0 ? null
       : { code: EXIT_FAIL, verdict: `**${failed} of ${total} scenarios failed.**` } },
 
-  // 6. catches failed, infrastructure-error, watchdog-timeout and a killed run's in-progress
   { n: 6, name: 'did-not-finish', run: ({ exitReason }) => exitReason === 'passed' ? null
       : { code: EXIT_FAIL, verdict: `**The run did not finish** (exitReason \`${exitReason}\`).` } },
 
@@ -196,7 +188,6 @@ function judgeNoReport({ dir, status, containerLog, playerLog, stampMs, fresh })
     );
   }
 
-  // unanchored: CI writes the line bare, a local RimLogging wraps it in a colour tag
   const bootLog = fresh(playerLog) === null ? null : read(playerLog);
   if (bootLog != null && !bootLog.includes('pickle: loaded')) {
     lines.push(
@@ -254,7 +245,6 @@ export function decide({ dir, status = 0, stamp, containerLog } = {}) {
   const counts = `${passed} passed, ${failed} failed, ${skipped} skipped, exitReason \`${exitReason}\`.`;
   const lines = [verdict, '', PARTIAL_REASONS.has(exitReason) ? `${counts} **The counts are partial.**` : counts];
 
-  // 8. counted, never gated on: a scenario that failed then passed on retry is a pass
   if (flaky > 0) lines.push('', `${flaky} scenario(s) failed at least once before passing.`);
   lines.push(...detail);
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# fetch-ffmpeg.sh <destination-file>
 set -euo pipefail
 
 DEST="${1:?usage: fetch-ffmpeg.sh <destination-file>}"

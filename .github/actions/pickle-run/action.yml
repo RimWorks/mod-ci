@@ -73,7 +73,6 @@ outputs:
 runs:
   using: composite
   steps:
-    # a refusal is a failing step: branch protection reads a skipped required job as green
     - name: Check the inputs
       shell: bash
       env:
@@ -87,14 +86,12 @@ runs:
       run: |
         set -euo pipefail
 
-        # 15 is what cosmere's ci.yml:106-108 budgets for checkout, build, the pull and staging
         OVERHEAD_MINUTES=15
 
         die() { printf 'error: %s\n' "$@" >&2; exit 1; }
 
         for pair in "run-timeout=$RUN_TIMEOUT" "timeout-minutes=$TIMEOUT_MINUTES" \
                     "retries=$RETRIES" "leg-index=$LEG_INDEX"; do
-          # a number input arrives as a string, and $((x + abc)) reads abc as zero
           [[ "${pair#*=}" =~ ^[0-9]+$ ]] ||
             die "${pair%%=*} is '${pair#*=}', which is not a whole number"
         done
@@ -171,7 +168,6 @@ runs:
         fi
         export SUITE_FILTER
 
-        # one tunnel binds one port, so legs offset off the base rather than collide
         export DASHBOARD_PORT=$(( 27750 + LEG_INDEX ))
 
         runner="${{ github.action_path }}/run-suite.sh"
@@ -192,7 +188,6 @@ runs:
           node "${{ github.action_path }}/verdict.mjs" \
             "$REPORT_DIR" "$status" "$stamp" "$container_log" || verdict=$?
 
-          # 75 is the one retryable verdict: no report at all, plus a dead X server
           if [[ "$verdict" != 75 ]]; then
             # a comparison absorbs a verdict that read a report. 2 means there was none to read
             if [[ "$REPORT_ONLY" == "true" && "$verdict" != 2 ]]; then

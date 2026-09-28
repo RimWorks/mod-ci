@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# stage-mods.sh <harmony|concord|both> <mods-dir> <config-dir>
-# Downloads the mods a suite needs and writes the config the game boots with. Versions float,
-# so an upstream break shows up on the next run rather than the next bump.
 set -euo pipefail
 
 BACKENDS="${1:?usage: stage-mods.sh <harmony|concord|both> <mods-dir> <config-dir>}"
@@ -13,7 +10,6 @@ MOD_NAME="${MOD_NAME:-}"
 MOD_PACKAGE_ID="${MOD_PACKAGE_ID:?the packageId of the mod under test, one per line}"
 GAME_VERSION="${GAME_VERSION:-1.6}"
 STAGED_MODS="${STAGED_MODS:-}"
-# 'self', empty to float to the latest release, a release tag, or 'none' to leave pickle out.
 PICKLE_VERSION="${PICKLE_VERSION:-}"
 
 PICKLE_REPO="RimWorks/Rimworld-Pickle"
@@ -22,7 +18,6 @@ die() {
   echo "error: $*" >&2
   exit 1
 }
-
 
 [[ "$BACKENDS" == "harmony" || "$BACKENDS" == "concord" || "$BACKENDS" == "both" ]] ||
   die "backend '$BACKENDS' is not harmony, concord or both"
@@ -43,7 +38,6 @@ while read -r entry; do
     die "mod dir '$entry' is not checkout-path:MountName"
   [[ "$mount" != */* && "$mount" != "." && "$mount" != ".." ]] ||
     die "mount '$mount' is a path, not a folder name under Mods"
-  # A mistyped path reads as a missing def three minutes later, so catch it here.
   [[ -d "$src" ]] || die "mod dir '$src', mounted as '$mount', does not exist"
   mod_srcs+=("$src")
   mod_mounts+=("$mount")
@@ -74,7 +68,6 @@ if [[ -n "$STAGED_MODS" ]]; then
   done
 fi
 
-# stage_release_zip rm -rf's its destination, so a mount sharing a name would be replaced by it
 reserved_names=()
 reserved_owners=()
 reserve() {

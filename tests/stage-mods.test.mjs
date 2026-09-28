@@ -10,7 +10,6 @@ import { promisify } from 'node:util';
 const run = promisify(execFile);
 const script = join(import.meta.dirname, '..', '.github', 'actions', 'stage-mods', 'stage-mods.sh');
 
-// Every case here is refused before the first download, so the suite needs no network.
 async function stage(env) {
   const root = await mkdtemp(join(tmpdir(), 'stage-mods-'));
   await mkdir(join(root, 'mod'));
@@ -25,8 +24,6 @@ async function stage(env) {
   throw new Error('expected the staging script to fail');
 }
 
-// A curl that answers the release api and an unzip that unpacks its answer, so a whole staging
-// run happens offline. The zip a download writes is just the folder name the unzip stub creates.
 const curlStub = `#!/bin/sh
 out=""; url=""; prev=""
 for a in "$@"; do

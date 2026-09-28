@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# run-suite.sh <image-ref> <mods-dir> <config-dir> <report-dir>
 set -euo pipefail
 
 IMAGE="${1:?usage: run-suite.sh <image-ref> <mods-dir> <config-dir> <report-dir>}"
@@ -15,20 +14,17 @@ DASHBOARD_PORT="${DASHBOARD_PORT:-27750}"
 SET_NAME="${SET_NAME:-}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-}"
 
-# the action ships its scripts beside this one, wherever the runner unpacked it
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="${RUNNER_TEMP:-/tmp}"
 # before any exit path: a stale log from the last attempt reads as this one's X death
 : > "$TMP/container.log"
 CFG="/home/app/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config"
 
-# PickleArgs.IntArg silently keeps its own 60 for a value int.TryParse refuses
 for var in FILM_SECONDS RUN_TIMEOUT; do
   [[ -z "${!var}" || "${!var}" =~ ^[0-9]+$ ]] ||
     { echo "error: $var is '${!var}', not a whole number" >&2; exit 1; }
 done
 
-# a mistyped mod directory reads as a missing def three minutes later, so name it now
 for src in "$MODS_DIR" "$CONFIG_DIR"; do
   [[ -d "$src" ]] || { echo "error: no directory at $src" >&2; exit 1; }
 done
@@ -38,7 +34,6 @@ if [[ -n "$SUITE_FILTER" ]]; then
 elif [[ "$UNFILTERED" == "true" ]]; then
   run_arg="-pickle-run"
 else
-  # an unfiltered run plays every other loaded mod's features, so the caller says so out loud
   echo "error: SUITE_FILTER is empty and UNFILTERED is not true" >&2
   exit 1
 fi
@@ -75,8 +70,6 @@ if [[ "$LIVE_DASHBOARD" == "true" ]]; then
   game_args+=("-pickle-http-port=$DASHBOARD_PORT")
 fi
 
-# unity marks incrementally while other threads run, and a freed mono root left on the
-# mark stack takes the collector out. ~5% of boots, any patcher, not ours to fix.
 docker run --rm --name "pickle-suite${SET_NAME:+-$SET_NAME}" \
   -e GC_DISABLE_INCREMENTAL=1 \
   -v "$MODS_DIR:/game/Mods:ro" \

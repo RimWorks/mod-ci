@@ -10,7 +10,6 @@ updates:
       actions:
         patterns: ["*"]
     commit-message:
-      # chore is absent from releaseRules, so a CI-only bump does not cut a release
       prefix: "chore(deps)"
   - package-ecosystem: "npm"
     directory: "/"

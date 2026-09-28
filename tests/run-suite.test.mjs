@@ -73,7 +73,6 @@ test('passes a valid film length and run timeout through untouched', async () =>
   assert.equal(code, 0);
   assert.ok(argv.includes('-pickle-max-film-seconds=0'));
   assert.ok(argv.includes('-pickle-run-timeout=30'));
-  // film off means no ffmpeg download and no mount for it
   assert.ok(!argv.some((arg) => arg.includes('ffmpeg')));
 });
 
@@ -94,7 +93,6 @@ test('keeps the spaces in a filter, so a set name reaches the game as one argume
 });
 
 test('mounts the config directory where the game looks for it on windows', async () => {
-  // GenFilePaths.ConfigFolderPath is savedatafolder plus Config, so a flat mount hides ModsConfig
   const { argv } = await suite('windows', { UNFILTERED: 'true' });
   assert.ok(argv.some((arg) => arg.endsWith('/config:/home/app/savedata/Config')));
   assert.ok(argv.includes('-savedatafolder=Z:\\home\\app\\savedata'));

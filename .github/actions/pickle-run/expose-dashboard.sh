@@ -2,9 +2,7 @@
 # expose-dashboard.sh [port]
 set -euo pipefail
 
-# a matrix gives every leg its own port, so the caller offsets from 27750 per leg
 PORT="${1:-${DASHBOARD_PORT:-27750}}"
-# four legs means four URLs in one log, so each one says which set it belongs to
 LABEL="${SET_NAME:-dashboard}"
 CLOUDFLARED="${RUNNER_TEMP:-/tmp}/cloudflared-${PORT}"
 LOG="${RUNNER_TEMP:-/tmp}/cloudflared-${PORT}.log"

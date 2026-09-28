@@ -43,8 +43,6 @@ runs:
         managed="$DEST/RimWorldLinux_Data/Managed"
         mkdir -p "$managed"
         docker cp "$cid:/game/RimWorldLinux_Data/Managed/." "$managed/"
-        # beside the dlls, not at the game root: writeStamp's refsDir and a local gamecrate
-        # refs dir then mean the same directory
         docker cp "$cid:/game/Version.txt" "$managed/Version.txt"
 
         [[ -f "$managed/Assembly-CSharp.dll" ]] || {

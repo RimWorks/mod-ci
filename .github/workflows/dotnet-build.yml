@@ -1,8 +1,5 @@
 name: dotnet build
 
-# Build, test, publish the results and check formatting. Every mod repo had its own near
-# identical copy of this job, which is the drift this package exists to stop.
-
 on:
   workflow_call:
     inputs:

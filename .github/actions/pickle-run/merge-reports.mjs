@@ -11,10 +11,8 @@ const FILM_PREFIX = 'screenshots/film/';
 const MESSAGE_LIMIT = 300;
 const FAILURE_ROWS = 50;
 
-// legs upload as pickle-report-<leg>, films land under the bare name. the fallback is the dead-leg path
 export const setNameFrom = (raw) => raw.replace(/^(?:pickle-report|compat)-/, '');
 
-// BuildPayload escapes </ so a failure message cannot close its own script tag
 const escape = (text) => text.replaceAll('</', '<\\/');
 
 function readPayload(html) {
@@ -95,7 +93,6 @@ export async function mergeReports(setsDir, out = 'merged.html') {
       continue;
     }
 
-    // Only a leg that parsed can be the template, or the merged file inherits the truncation.
     template ??= html;
     const name = setNameFrom(payload.setName || dir);
     payload.setName = name;

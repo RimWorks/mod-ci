@@ -21,7 +21,6 @@ jobs:
         id: meta
         uses: dependabot/fetch-metadata@v3
 
-      # majors stay open for a human: MSTest 3 to 4 and TypeScript 5 to 7 both broke the build
       - name: Enable auto-merge for patch and minor
         if: steps.meta.outputs.update-type == 'version-update:semver-patch'
           || steps.meta.outputs.update-type == 'version-update:semver-minor'

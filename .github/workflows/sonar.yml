@@ -78,7 +78,6 @@ on:
         type: string
         default: '1.6'
     secrets:
-      # matches the repo secret name. secret names cannot contain a hyphen.
       SONAR_TOKEN:
         required: true
 
@@ -90,7 +89,6 @@ permissions:
 
 jobs:
   analyze:
-    # dependabot PRs get no repository secrets, so SONAR_TOKEN is empty and the scan cannot authenticate.
     if: github.actor != 'dependabot[bot]'
     runs-on: ${{ inputs.runner }}
     steps:
@@ -132,8 +130,6 @@ jobs:
         with:
           image: ${{ inputs.game-image }}
 
-      # the scanner's build, its analyzer gate and its tests all resolve references, and
-      # dotnet format takes no -p:, so both properties go where msbuild reads them anyway
       - name: Point msbuild at the refs
         shell: bash
         env:

@@ -9,8 +9,6 @@ import { CHECK_ORDER, decide } from '../.github/actions/pickle-run/verdict.mjs';
 
 const XIO = 'XIO:  fatal IO error 11 (Resource temporarily unavailable) on X server ":99"';
 
-// cut before the closing tag, or cut inside the json with the tag still there.
-// stamp first, then every report file, so mtimes order the way a real run leaves them
 async function fixture(files = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'mod-ci-verdict-'));
   const stamp = join(dir, 'stamp');
@@ -24,7 +22,6 @@ async function fixture(files = {}) {
   return { dir, stamp, containerLog: join(dir, 'container.log') };
 }
 
-// older than the stamp fixture() wrote, so the file reads as a previous attempt's leftover
 async function backdate(dir, name) {
   const old = new Date(Date.now() - 120_000);
   await utimes(join(dir, name), old, old);
@@ -132,7 +129,6 @@ test('an empty container log counts as unread, not as a clean grep', async (t) =
 });
 
 test('the X pattern tolerates the two spaces xlib actually writes', async (t) => {
-  // a literal one-space pattern matches nothing in a real log and turns every retry off silently
   assert.ok(!/XIO: fatal IO error/.test(XIO));
 
   const run = await fixture({ 'Player.log': `${XIO}\n`, 'container.log': 'boot\n' });
@@ -278,8 +274,6 @@ test('a leg that reported keeps exit 1, so a comparison leg can absorb it', asyn
   assert.equal(decide(run).code, 1);
 });
 
-
-// the nine checks are a list now, so nothing but this stops a reorder
 test('the eight checks keep their order and their numbers', () => {
   assert.deepEqual(CHECK_ORDER, [
     '1:no-stamp',
