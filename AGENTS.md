@@ -47,6 +47,8 @@ node bin/verify-ship-list.mjs .         # run the checker against this repo
 ```
 
 - Run the full suite before committing. All tests must pass.
+- The suite needs `rsync`, `zip` and `unzip` on the path. On Windows the four `package-mod` tests
+  fail on the missing binaries. Use WSL or a container instead.
 - While iterating, run the single test closest to your change.
 - Never delete, weaken, or rewrite a test to make a change pass.
 - Do not claim that an interrupted or timed-out run passed.

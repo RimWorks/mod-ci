@@ -28,6 +28,9 @@ const { zipPath, entries } = await packageMod({ name: 'Pickle', version: '1.2.3'
 Returns the zip path and the top-level names that went in. Takes `modPath` for a repo that holds
 several mods, and `outDir` when `dist` is taken.
 
+This is the one module that shells out. It needs `rsync` and `zip` on the path, so it runs on Linux
+and macOS but not on Windows.
+
 ## `releaseConfig`
 
 The whole semantic-release config for a mod repo. A repo declares what it contains. The function
