@@ -19,6 +19,14 @@ on:
         description: Path to an lcov report. Empty skips coverage.
         type: string
         default: ''
+      bun-version-file:
+        description: File naming the bun version to install, for example .bun-version. Empty installs no bun.
+        type: string
+        default: ''
+      test-command:
+        description: Command that writes the coverage report, run before the scan. Empty runs nothing.
+        type: string
+        default: ''
       extra-args:
         description: Extra -D arguments passed to the scanner.
         type: string
@@ -42,6 +50,16 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
           allow-unsafe-pr-checkout: ${{ github.event_name == 'pull_request_target' }}
+
+      - if: inputs.bun-version-file != ''
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: ${{ inputs.bun-version-file }}
+
+      - if: inputs.test-command != ''
+        env:
+          TEST_COMMAND: ${{ inputs.test-command }}
+        run: bash -c "$TEST_COMMAND"
 
       - uses: SonarSource/sonarqube-scan-action@v8
         env:

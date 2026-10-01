@@ -138,8 +138,8 @@ jobs:
           echo "GameVersion=$GAME_VERSION" >> "$GITHUB_ENV"
           echo "GameManagedDir=$MANAGED_DIR" >> "$GITHUB_ENV"
 
-      # sha rather than ./ because a called workflow only has the caller's repo checked out
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@2b12ceb52c4db9a43964846dd92dd4eeb8cb73cb # test-command
+      # a full ref rather than ./ because a called workflow only has the caller's repo checked out
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v3
         with:
           solution: ${{ inputs.solution }}
           project-key: ${{ inputs.project-key }}
