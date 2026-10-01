@@ -95,6 +95,34 @@ verifies against the current RimWorld and republishes with no code changes.
 The repo's `scripts/workshop-bump.mjs` reads `WORKSHOP_ID` and falls back to the id hard-coded in the
 script, so `workshop-id` is only needed to point a run at a different item.
 
+## `gate`
+
+Fails unless every job result handed to it passed or was skipped. A ruleset then requires one
+check name that never moves.
+
+```yaml
+  gate:
+    name: ci gate
+    if: always()
+    needs: [prose, links, images, build, quickstart]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: RimWorks/mod-ci/.github/actions/gate@v3
+        with:
+          results: ${{ join(needs.*.result, ' ') }}
+```
+
+`if: always()` is required, or a failed dependency skips the gate and the check never reports.
+
+Two things to get right in `needs`. List the jobs that produce the matrix legs, not only the jobs
+that consume them: a job whose dependency failed reports `skipped`, so leaving out an image or
+prepare job lets a real failure through as a pass. And list only jobs that are green on the default
+branch, because the gate inherits every red job it covers and blocks every pull request until that
+job is fixed.
+
+A skipped result passes. A job that had nothing to do is not a failure, and a fork pull request
+skips any job that needs a secret.
+
 ## `discord-release`
 
 Announces the release semantic-release just cut in the Discord releases channel, and pings that

@@ -1,0 +1,30 @@
+name: gate
+description: >
+  Fail unless every job result handed in passed or was skipped. Give a ruleset one stable required
+  check instead of matrix job names that carry the game image tag and move with every game patch.
+
+inputs:
+  results:
+    description: "Space separated job results, as ${{ join(needs.*.result, ' ') }}"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        RESULTS: ${{ inputs.results }}
+      run: |
+        if [[ -z "${RESULTS// }" ]]; then
+          echo "no job results were handed in: check the gate job's needs list"
+          exit 1
+        fi
+        echo "$RESULTS"
+        failed=0
+        for result in $RESULTS; do
+          case "$result" in
+            success | skipped) ;;
+            *) echo "a job this gate covers reported $result" && failed=1 ;;
+          esac
+        done
+        exit "$failed"
