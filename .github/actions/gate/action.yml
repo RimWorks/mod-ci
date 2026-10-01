@@ -5,7 +5,7 @@ description: >
 
 inputs:
   results:
-    description: "Space separated job results, as ${{ join(needs.*.result, ' ') }}"
+    description: "Space separated job results, from join of needs.*.result"
     required: true
 
 runs:
