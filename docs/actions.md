@@ -72,6 +72,12 @@ through a publish.
 `STEAM_CONFIG_VDF` is the path of the restored file, not its contents. `semantic-release-steam` opens
 that path, so a job that sets the variable itself from a secret makes the upload fail.
 
+The two names hold different shapes. `STEAM_CONFIG_VDF_B64` is base64 of `config.vdf` and is what the
+repo secret stores, which is why the input is `steam-config-vdf-b64`. `STEAM_CONFIG_VDF` is a path,
+and this action is what writes the file and exports it. gamecrate is the exception: it reads base64
+out of `STEAM_CONFIG_VDF` itself, so `steam-game-image-action` is handed the secret as-is and one job
+cannot share a single `STEAM_CONFIG_VDF` between gamecrate and a publish step.
+
 ## `steam-republish`
 
 Pushes an already-built mod to its Steam Workshop item. Used by `weekly-verify`, where the run
