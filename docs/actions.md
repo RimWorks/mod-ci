@@ -123,6 +123,14 @@ job is fixed.
 A skipped result passes. A job that had nothing to do is not a failure, and a fork pull request
 skips any job that needs a secret.
 
+A failed `ci gate` is cached with the run that produced it. A pull request that ran before the job
+existed keeps the result it had, and a rebase does not clear it. Re-run the failed jobs.
+
+The `needs` context is valid in the caller's workflow and not inside this action's manifest. So
+`${{ join(needs.*.result, ' ') }}` belongs in the caller, and writing it anywhere in the manifest,
+including an input description, fails the whole action with `Unrecognized named-value: 'needs'`
+before a step runs.
+
 ## `discord-release`
 
 Announces the release semantic-release just cut in the Discord releases channel, and pings that
