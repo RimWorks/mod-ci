@@ -89,7 +89,6 @@ permissions:
 
 jobs:
   analyze:
-    if: github.actor != 'dependabot[bot]'
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v7

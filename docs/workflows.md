@@ -381,10 +381,11 @@ something first.
 only reference set, and one version is enough for a scan. Call `game-image.yml` first and pass its
 `image-ref`. `game-version` picks the `RW_*` constant and defaults to `1.6`.
 
-The job skips itself for `dependabot[bot]`. A dependabot pull request does not get repository
-secrets, and the scan cannot authenticate with an empty token.
+**Dependabot pull requests.** A dependabot run reads the Dependabot secret store, not the Actions
+one. Put the token in both stores, or the scan authenticates with an empty string:
+`gh secret set SONAR_TOKEN --app dependabot`.
 
-**Pull requests from forks.** A `pull_request` run from a fork does not get secrets either. The
+**Pull requests from forks.** A `pull_request` run from a fork does not get secrets. The
 scan dies on an empty token. Trigger the caller on `pull_request_target` instead. The job then
 runs with the base repo's secrets. Both `sonar` and `sonar-scan` check out the PR head and
 pass the PR number, branch and base to the scanner themselves. You do not have to change anything
