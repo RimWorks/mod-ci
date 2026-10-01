@@ -17,7 +17,7 @@ The caller does its own checkout, because Sonar needs the full history to scope 
         with:
           fetch-depth: 0
 
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v1
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v3
         with:
           solution: Quickstarts.slnx
           project-key: RimWorks_Rimworld-Quickstarts
@@ -40,7 +40,7 @@ beside them. `dotnet-build` calls it once per matrix leg, so use it directly onl
 builds a mod outside that workflow.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v1
+      - uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v3
         id: refs
         with:
           image: ${{ needs.image-16.outputs.image-ref }}
@@ -60,7 +60,7 @@ Installs SteamCMD and restores a logged-in `config.vdf`. It exports `STEAMCMD_PA
 its own Steam step.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/steam-login@v1
+      - uses: RimWorks/mod-ci/.github/actions/steam-login@v3
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
@@ -84,7 +84,7 @@ Pushes an already-built mod to its Steam Workshop item. Used by `weekly-verify`,
 verifies against the current RimWorld and republishes with no code changes.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/steam-republish@v1
+      - uses: RimWorks/mod-ci/.github/actions/steam-republish@v3
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
@@ -148,7 +148,7 @@ for the event.
       - name: Run semantic-release
         run: ./node_modules/.bin/semantic-release
 
-      - uses: RimWorks/mod-ci/.github/actions/discord-release@v1
+      - uses: RimWorks/mod-ci/.github/actions/discord-release@v3
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           mod-name: Pickle
@@ -181,7 +181,7 @@ Use it when a job launches the game itself. [Quickstarts][qs] runs a quickstart 
 than a Pickle suite, and needs the staging without the runner.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/stage-mods@v1
+      - uses: RimWorks/mod-ci/.github/actions/stage-mods@v3
         with:
           mods-dir: ${{ runner.temp }}/mods
           config-dir: ${{ runner.temp }}/config
