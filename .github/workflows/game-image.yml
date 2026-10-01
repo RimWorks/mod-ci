@@ -201,7 +201,7 @@ jobs:
       image-refs: ${{ steps.merge.outputs.image-refs }}
       windows-image-refs: ${{ steps.merge.outputs.windows-image-refs }}
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: ${{ inputs.artifact-prefix }}-*
           path: refs
