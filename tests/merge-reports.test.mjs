@@ -237,6 +237,32 @@ test('no missing-column line when the merge itself failed', () => {
   assert.doesNotMatch(summary, /Missing from Compare sets/);
 });
 
+test('a single artifact extracted flat into the sets dir still merges', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'merge-flat-'));
+  try {
+    // download-artifact extracts one matching artifact straight into its path, so the report
+    // sits at the top of sets with no directory per leg
+    await mkdir(join(root, 'sets', 'screenshots', 'film', 'f'), { recursive: true });
+    await writeFile(join(root, 'sets', 'screenshots', 'film', 'f', '0000.jpg'), 'jpg');
+    await writeFile(join(root, 'sets', 'report.html'), report(filmed({ setName: 'harmony' })));
+    await writeFile(join(root, 'sets', 'summary.json'), JSON.stringify(
+      { passed: 1, failed: 0, skipped: 0, flaky: 0, total: 1, exitReason: 'passed' },
+    ));
+
+    const sets = await mergeReports(join(root, 'sets'), join(root, 'merged.html'));
+
+    assert.equal(sets.length, 1);
+    assert.equal(sets[0].name, 'harmony');
+    assert.equal(sets[0].counts.total, 1);
+
+    const merged = readPayload(await readFile(join(root, 'merged.html'), 'utf8'));
+    assert.equal(merged.sets.length, 1);
+    assert.equal(merged.sets[0].setName, 'harmony');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('every leg lacking a summary.json names the nested-artifact cause', async () => {
   const root = await mkdtemp(join(tmpdir(), 'merge-nested-'));
   try {

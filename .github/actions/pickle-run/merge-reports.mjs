@@ -64,10 +64,15 @@ async function readJson(path) {
 }
 
 export async function mergeReports(setsDir, out = 'merged.html') {
-  const dirs = (await readdir(setsDir, { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
+  // download-artifact extracts a single matching artifact straight into its path, so a run with
+  // one leg has the report at the top of setsDir and no directory to read the set name from
+  const flat = existsSync(join(setsDir, 'report.html')) || existsSync(join(setsDir, 'summary.json'));
+  const dirs = flat
+    ? ['.']
+    : (await readdir(setsDir, { withFileTypes: true }))
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort();
 
   const sets = [];
   let template = null;
@@ -78,7 +83,7 @@ export async function mergeReports(setsDir, out = 'merged.html') {
     const reportPath = join(legDir, 'report.html');
 
     if (!existsSync(reportPath)) {
-      sets.push({ name: setNameFrom(counts?.setName || dir), counts, failures: [] });
+      sets.push({ name: setNameFrom(counts?.setName || (dir === '.' ? 'suite' : dir)), counts, failures: [] });
       continue;
     }
 
@@ -89,12 +94,12 @@ export async function mergeReports(setsDir, out = 'merged.html') {
     try {
       payload = readPayload(html);
     } catch (err) {
-      sets.push({ name: setNameFrom(counts?.setName || dir), counts, failures: [], unreadable: err.message });
+      sets.push({ name: setNameFrom(counts?.setName || (dir === '.' ? 'suite' : dir)), counts, failures: [], unreadable: err.message });
       continue;
     }
 
     template ??= html;
-    const name = setNameFrom(payload.setName || dir);
+    const name = setNameFrom(payload.setName || counts?.setName || (dir === '.' ? 'suite' : dir));
     payload.setName = name;
     prefixFilmPaths(payload, name);
 
