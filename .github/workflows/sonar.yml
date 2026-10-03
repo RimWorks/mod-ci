@@ -39,6 +39,10 @@ on:
         description: "Extra /d: args appended to scanner begin, for example a javascript lcov path"
         type: string
         default: ''
+      ignore-rules:
+        description: "Rules to stop reporting, one `ruleKey=resourceKey` per line. Merged with the rules every consumer gets."
+        type: string
+        default: ''
       analyzer-severity:
         description: Severity for the analyzer gate, or 'none' to skip it
         type: string
@@ -154,6 +158,7 @@ jobs:
           extra-begin-args: >-
             ${{ inputs.extra-begin-args }}
             ${{ github.event_name == 'pull_request_target' && format('/d:sonar.pullrequest.key={0} /d:sonar.pullrequest.branch={1} /d:sonar.pullrequest.base={2}', github.event.pull_request.number, github.event.pull_request.head.ref, github.event.pull_request.base.ref) || '' }}
+          ignore-rules: ${{ inputs.ignore-rules }}
           analyzer-severity: ${{ inputs.analyzer-severity }}
           test-filter: ${{ inputs.test-filter }}
           test-command: ${{ inputs.test-command }}

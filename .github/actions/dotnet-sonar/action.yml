@@ -29,6 +29,9 @@ inputs:
   extra-begin-args:
     description: "Extra /d: args appended to scanner begin, for example a javascript lcov path"
     default: ''
+  ignore-rules:
+    description: "Rules to stop reporting, one `ruleKey=resourceKey` per line. Merged with the rules every consumer gets."
+    default: ''
   analyzer-severity:
     description: Severity for the analyzer gate, or 'none' to skip it
     default: info
@@ -81,6 +84,10 @@ runs:
         EXCLUSIONS: ${{ inputs.exclusions }}
         COVERAGE_EXCLUSIONS: ${{ inputs.coverage-exclusions }}
         EXTRA_BEGIN_ARGS: ${{ inputs.extra-begin-args }}
+        IGNORE_RULES: ${{ inputs.ignore-rules }}
+        UNACTIONABLE_RULES: |
+          githubactions:S7637=.github/workflows/*.yml
+          csharpsquid:S1135=**/*.cs
         SCANNER: ${{ runner.temp }}/scanner/dotnet-sonarscanner
         # git bash rewrites a leading-slash arg into a windows path, stripping the slash
         MSYS2_ARG_CONV_EXCL: "*"
@@ -100,6 +107,21 @@ runs:
         if [ -n "$COVERAGE_EXCLUSIONS" ]; then
           args+=(/d:sonar.coverage.exclusions="$COVERAGE_EXCLUSIONS")
         fi
+        keys=()
+        count=0
+        while IFS= read -r line; do
+          line=$(printf '%s' "$line" | tr -d '[:space:]')
+          [ -z "$line" ] && continue
+          case "$line" in *=*) ;; *) echo "::error::ignore-rules needs ruleKey=resourceKey, got '$line'"; exit 1 ;; esac
+          count=$((count + 1))
+          keys+=("ig$count")
+          args+=(/d:sonar.issue.ignore.multicriteria."ig$count".ruleKey="${line%%=*}")
+          args+=(/d:sonar.issue.ignore.multicriteria."ig$count".resourceKey="${line#*=}")
+        done < <(printf '%s\n%s\n' "$UNACTIONABLE_RULES" "$IGNORE_RULES")
+        if [ "$count" -gt 0 ]; then
+          args+=(/d:sonar.issue.ignore.multicriteria="$(IFS=,; printf '%s' "${keys[*]}")")
+        fi
+
         # set -f so the ** in a resourceKey is passed through instead of glob-expanded.
         set -f
         extra=($EXTRA_BEGIN_ARGS)

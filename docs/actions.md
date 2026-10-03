@@ -33,6 +33,19 @@ The analyzer gate runs `dotnet format analyzers --severity info`. MSTest and CA 
 info severity, which `dotnet build` never prints. Without the gate a human first sees them as a
 SonarCloud issue days later. Pass `analyzer-severity: none` to skip it.
 
+`ignore-rules` stops a rule being reported, one `ruleKey=resourceKey` per line:
+
+```yaml
+          ignore-rules: |
+            typescript:S3358=**/*.tsx
+            typescript:S6819=**/*.tsx
+```
+
+Two rules are always ignored, because no consumer can act on either. `githubactions:S7637` asks
+for a commit SHA where a floating major tag is deliberate, and `csharpsquid:S1135` flags the
+`TODO(reason)` markers these repos require. Your lines merge with those, so a free SonarCloud
+account can drop a rule it has no permission to edit in a quality profile.
+
 ## `stage-game-refs`
 
 Pulls a RimWorld game image and copies its managed assemblies onto the runner, with `Version.txt`
