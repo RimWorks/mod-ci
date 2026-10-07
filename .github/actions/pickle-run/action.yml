@@ -36,8 +36,11 @@ inputs:
     description: Value for -pickle-set-name. Match the artifact folder with any compat- prefix stripped, or the merged report's film links 404
     default: ''
   platform:
-    description: linux or windows
+    description: linux. windows is refused while gamecrate cannot trust a proton exit code
     default: linux
+  gamecrate-version:
+    description: Version of @gamecrate/cli and @gamecrate/rimworld to install. 3.2.0 is the first with config-free run
+    default: '3.2.0'
   film-seconds:
     description: Value for -pickle-max-film-seconds. 0 skips the ffmpeg download
     default: '0'
@@ -96,18 +99,10 @@ runs:
             die "${pair%%=*} is '${pair#*=}', which is not a whole number"
         done
 
-        [[ "$PLATFORM" == linux || "$PLATFORM" == windows ]] ||
-          die "platform is '$PLATFORM', which is not linux or windows"
-
-        if [[ "$PLATFORM" == windows ]]; then
-          [[ "$FILM_SECONDS" == 0 ]] ||
-            die "platform is 'windows' and film-seconds is '$FILM_SECONDS'." \
-                "run-suite-windows.sh hardcodes -pickle-max-film-seconds=0, and the ffmpeg it would mount is a linux binary."
-
-          [[ "$LIVE_DASHBOARD" != true ]] ||
-            die "platform is 'windows' and live-dashboard is '$LIVE_DASHBOARD'." \
-                "run-suite-windows.sh publishes no port and never starts the tunnel."
-        fi
+        [[ "$PLATFORM" == linux ]] ||
+          die "platform is '$PLATFORM', and only linux runs today." \
+              "the suite drives the container through gamecrate, which does not trust a proton exit code," \
+              "so a windows leg would hand the verdict step a failure for every run."
 
         needed=$(( (RETRIES + 1) * RUN_TIMEOUT + OVERHEAD_MINUTES ))
         (( needed < TIMEOUT_MINUTES )) ||
@@ -127,6 +122,16 @@ runs:
           ghcr.io/*) echo "$GITHUB_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin ;;
           *) echo "not a ghcr image, skipping the login" ;;
         esac
+
+    - name: Install gamecrate
+      shell: bash
+      env:
+        GAMECRATE_VERSION: ${{ inputs.gamecrate-version }}
+      run: |
+        set -euo pipefail
+        npm install -g --no-fund --no-audit \
+          "@gamecrate/cli@$GAMECRATE_VERSION" "@gamecrate/rimworld@$GAMECRATE_VERSION"
+        gamecrate --help >/dev/null
 
     # stage-mods.sh lives one directory over so a staging-only consumer can use it without the runner
     - name: Stage the mods and config
@@ -171,7 +176,6 @@ runs:
         export DASHBOARD_PORT=$(( 27750 + LEG_INDEX ))
 
         runner="${{ github.action_path }}/run-suite.sh"
-        [[ "$PLATFORM" == linux ]] || runner="${{ github.action_path }}/run-suite-windows.sh"
 
         # both runners write the container's stdout here, and verdict.mjs has no default for it
         container_log="$RUNNER_TEMP/container.log"

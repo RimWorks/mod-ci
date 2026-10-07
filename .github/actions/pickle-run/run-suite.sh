@@ -18,7 +18,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="${RUNNER_TEMP:-/tmp}"
 # before any exit path: a stale log from the last attempt reads as this one's X death
 : > "$TMP/container.log"
-CFG="/home/app/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config"
+
 
 for var in FILM_SECONDS RUN_TIMEOUT; do
   [[ -z "${!var}" || "${!var}" =~ ^[0-9]+$ ]] ||
@@ -38,10 +38,28 @@ else
   exit 1
 fi
 
-echo "pulling $IMAGE ..."
-start=$SECONDS
-docker pull -q "$IMAGE" || exit 1
-echo "pulled in $((SECONDS - start))s"
+MODS_CONFIG="$CONFIG_DIR/ModsConfig.xml"
+[[ -f "$MODS_CONFIG" ]] ||
+  { echo "error: no ModsConfig.xml at $MODS_CONFIG, so nothing names the load order" >&2; exit 1; }
+
+mod_refs=()
+while read -r id; do
+  [[ -n "$id" && "$id" != ludeon.* ]] || continue
+  found=''
+  for dir in "$MODS_DIR"/*/; do
+    [[ -f "$dir/About/About.xml" ]] || continue
+    if grep -qiF "<packageId>$id</packageId>" "$dir/About/About.xml"; then
+      found="${dir%/}"
+      break
+    fi
+  done
+  [[ -n "$found" ]] ||
+    { echo "error: ModsConfig.xml lists '$id' and no folder under $MODS_DIR declares it" >&2; exit 1; }
+  mod_refs+=(--mod "path:$found")
+done < <(sed -n '/<activeMods>/,/<\/activeMods>/s|.*<li>\(.*\)</li>.*|\1|p' "$MODS_CONFIG")
+
+[[ ${#mod_refs[@]} -gt 0 ]] ||
+  { echo "error: ModsConfig.xml names no mod outside the official DLC, so nothing is under test" >&2; exit 1; }
 
 mkdir -p "$REPORT_DIR"
 chmod 777 "$REPORT_DIR"
@@ -55,31 +73,30 @@ if [[ -n "$RUN_TIMEOUT" ]]; then
   game_args+=("-pickle-run-timeout=$RUN_TIMEOUT")
 fi
 
-mounts=()
+args=(run --game rimworld --image "$IMAGE" --mode headless --plain)
+if [[ -n "$RUN_TIMEOUT" ]]; then
+  args+=(--timeout "$((RUN_TIMEOUT * 60 + 120))")
+fi
+args+=("${mod_refs[@]}")
+args+=(--docker-arg -e --docker-arg GC_DISABLE_INCREMENTAL=1)
+args+=(--docker-arg -v --docker-arg "$REPORT_DIR:/out")
+
 if [[ "$FILM_SECONDS" != "0" ]]; then
   if "$HERE/fetch-ffmpeg.sh" "$TMP/ffmpeg"; then
-    mounts+=(-v "$TMP/ffmpeg:/usr/local/bin/ffmpeg:ro")
+    args+=(--docker-arg -v --docker-arg "$TMP/ffmpeg:/usr/local/bin/ffmpeg:ro")
   else
     echo "::warning title=Pickle film::no ffmpeg, so this run keeps frames and gets no videos"
   fi
 fi
 
-ports=()
 if [[ "$LIVE_DASHBOARD" == "true" ]]; then
-  ports=(-p "$DASHBOARD_PORT:$DASHBOARD_PORT")
+  args+=(--docker-arg -p --docker-arg "$DASHBOARD_PORT:$DASHBOARD_PORT")
   game_args+=("-pickle-http-port=$DASHBOARD_PORT")
 fi
 
-docker run --rm --name "pickle-suite${SET_NAME:+-$SET_NAME}" \
-  -e GC_DISABLE_INCREMENTAL=1 \
-  -v "$MODS_DIR:/game/Mods:ro" \
-  -v "$CONFIG_DIR:$CFG" \
-  -v "$REPORT_DIR:/out" \
-  "${ports[@]}" "${mounts[@]}" \
-  "$IMAGE" \
-  run-headless /game/RimWorldLinux "${game_args[@]}" \
-    -pickle-report-dir=/out -logfile /out/Player.log \
-  > "$TMP/container.log" 2>&1 &
+args+=(-- "${game_args[@]}" -pickle-report-dir=/out -logfile /out/Player.log)
+
+gamecrate "${args[@]}" > "$TMP/container.log" 2>&1 &
 game=$!
 echo "game container started, waiting for its log ..."
 
@@ -90,7 +107,7 @@ container_follow=$!
 ( sleep 45
   if [[ ! -f "$REPORT_DIR/Player.log" ]]; then
     echo "no Player.log after 45s; dumping state"
-    docker ps -a --filter name=pickle-suite --format '{{.Status}} {{.Image}}'
+    docker ps -a --filter name=gamecrate-rimworld --format '{{.Status}} {{.Image}}'
     ls -la "$REPORT_DIR" || true
   fi ) &
 watchdog=$!

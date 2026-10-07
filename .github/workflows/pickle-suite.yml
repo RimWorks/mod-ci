@@ -69,7 +69,7 @@ on:
         type: string
         default: 10.0.x
       platform:
-        description: linux or windows. A windows leg needs game-image, since the image job builds a linux one.
+        description: linux. windows is refused while gamecrate cannot trust a proton exit code.
         type: string
         default: linux
       run-timeout:
@@ -133,10 +133,9 @@ jobs:
                 "pass an image ref, or a steam branch for this workflow to build one from."
           fi
 
-          # game-image.yml downloads the linux depot, so nothing here can produce a windows ref
-          [[ "$PLATFORM" != windows || -n "$GAME_IMAGE" ]] ||
-            die "platform is 'windows' and game-image is empty." \
-                "the image job builds a linux image, so a windows leg has to be handed its own ref."
+          [[ "$PLATFORM" == linux ]] ||
+            die "platform is '$PLATFORM', and only linux runs today." \
+                "the suite drives the container through gamecrate, which does not trust a proton exit code."
 
       - name: Read the sets
         id: read

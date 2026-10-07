@@ -15,18 +15,29 @@ const scripts = {
 
 // A stub docker records the argv it was handed and returns whatever exit code the case wants,
 // so nothing here pulls an image or starts a game.
-async function suite(platform, env = {}, dockerExit = '0') {
+async function suite(platform, env = {}, dockerExit = '0', modsConfig = null) {
   const root = await mkdtemp(join(tmpdir(), 'run-suite-'));
   const bin = join(root, 'bin');
   await mkdir(bin);
   await mkdir(join(root, 'mods'));
   await mkdir(join(root, 'config'));
-  await writeFile(join(bin, 'docker'), [
-    '#!/usr/bin/env bash',
-    'printf "%s\\n" "$@" >> "$DOCKER_ARGV"',
-    '[[ "$1" == run ]] && exit "$DOCKER_EXIT"',
-    'exit 0',
-  ].join('\n'), { mode: 0o755 });
+  await mkdir(join(root, 'mods', 'MyMod', 'About'), { recursive: true });
+  await writeFile(join(root, 'mods', 'MyMod', 'About', 'About.xml'),
+    '<ModMetaData><packageId>cryptik.mymod</packageId></ModMetaData>');
+  await writeFile(join(root, 'config', 'ModsConfig.xml'), modsConfig ?? [
+    '<ModsConfigData><activeMods>',
+    '  <li>ludeon.rimworld</li>',
+    '  <li>cryptik.mymod</li>',
+    '</activeMods></ModsConfigData>',
+  ].join('\n'));
+  for (const name of ['docker', 'gamecrate']) {
+    await writeFile(join(bin, name), [
+      '#!/usr/bin/env bash',
+      'printf "%s\\n" "$@" >> "$DOCKER_ARGV"',
+      '[[ "$1" == run ]] && exit "$DOCKER_EXIT"',
+      'exit 0',
+    ].join('\n'), { mode: 0o755 });
+  }
 
   const argv = join(root, 'docker-argv');
   const err = join(root, 'stderr.log');
@@ -90,6 +101,69 @@ test('keeps the spaces in a filter, so a set name reaches the game as one argume
     const { argv } = await suite(platform, { SUITE_FILTER: 'Cosmere - Core' });
     assert.ok(argv.includes('-pickle-run=Cosmere - Core'), platform);
   }
+});
+
+test('hands gamecrate one mod ref per staged folder, skipping the official DLC', async () => {
+  const { argv } = await suite('linux', { UNFILTERED: 'true' });
+
+  const refs = argv.filter((arg) => arg.startsWith('path:'));
+  assert.equal(refs.length, 1);
+  assert.ok(refs[0].endsWith('/mods/MyMod'));
+  assert.ok(!argv.some((arg) => arg.includes('ludeon.rimworld')));
+});
+
+test('keeps the ModsConfig load order, so the mod under test still loads last', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'run-suite-order-'));
+  const bin = join(root, 'bin');
+  await mkdir(bin);
+  await mkdir(join(root, 'config'));
+  for (const [folder, id] of [['Dep', 'other.dep'], ['Mine', 'cryptik.mymod']]) {
+    await mkdir(join(root, 'mods', folder, 'About'), { recursive: true });
+    await writeFile(join(root, 'mods', folder, 'About', 'About.xml'),
+      `<ModMetaData><packageId>${id}</packageId></ModMetaData>`);
+  }
+  await writeFile(join(root, 'config', 'ModsConfig.xml'), [
+    '<ModsConfigData><activeMods>',
+    '  <li>other.dep</li>',
+    '  <li>cryptik.mymod</li>',
+    '</activeMods></ModsConfigData>',
+  ].join('\n'));
+  await writeFile(join(bin, 'gamecrate'), [
+    '#!/usr/bin/env bash',
+    'printf "%s\\n" "$@" >> "$DOCKER_ARGV"',
+    'exit 0',
+  ].join('\n'), { mode: 0o755 });
+
+  const argvFile = join(root, 'argv');
+  await writeFile(argvFile, '');
+  await run('timeout', ['-s', 'KILL', '30', 'bash', '-c',
+    'exec bash "$0" "$@" > /dev/null 2>&1', scripts.linux,
+    'example/image', join(root, 'mods'), join(root, 'config'), join(root, 'reports')], {
+    env: { PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: root, DOCKER_ARGV: argvFile, UNFILTERED: 'true' },
+  }).catch((e) => e);
+
+  const refs = (await readFile(argvFile, 'utf8')).split('\n').filter((a) => a.startsWith('path:'));
+  assert.deepEqual(refs.map((r) => r.split('/').pop()), ['Dep', 'Mine']);
+});
+
+test('splits every docker-arg into its own flag, which is the only form docker accepts', async () => {
+  const { argv } = await suite('linux', { UNFILTERED: 'true' });
+
+  const mount = argv.findIndex((arg) => arg.endsWith('/reports:/out'));
+  assert.ok(mount > 1);
+  assert.equal(argv[mount - 1], '--docker-arg');
+  assert.equal(argv[mount - 2], '-v');
+});
+
+test('refuses a ModsConfig id that no staged folder declares', async () => {
+  const { code, stderr } = await suite('linux', { UNFILTERED: 'true' }, '0', [
+    '<ModsConfigData><activeMods>',
+    '  <li>nobody.ghost</li>',
+    '</activeMods></ModsConfigData>',
+  ].join('\n'));
+
+  assert.equal(code, 1);
+  assert.match(stderr, /lists 'nobody\.ghost' and no folder/);
 });
 
 test('mounts the config directory where the game looks for it on windows', async () => {

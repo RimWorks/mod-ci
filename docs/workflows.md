@@ -304,7 +304,7 @@ the copies drifted apart. That is the failure the release plumbing here exists t
 | `build-command` | string | `dotnet build -c Release` | Builds the mod before staging |
 | `build-artifacts` | string | `''` | Newline list of `name:path` artifacts to download before the build |
 | `dotnet-version` | string | `10.0.x` | Passed to `setup-dotnet`. Empty skips it, for a build that does not use the SDK |
-| `platform` | string | `'linux'` | `linux` or `windows`. Read the Windows rule below |
+| `platform` | string | `'linux'` | `linux` only. Read the Windows rule below |
 | `run-timeout` | number | `30` | Value for `-pickle-run-timeout`, minutes. Pickle's own watchdog |
 | `timeout-minutes` | number | `70` | The job timeout, the backstop for a wedged watchdog |
 | `retries` | number | `0` | Extra container attempts, for a dead X server only |
@@ -338,13 +338,12 @@ matrix, a Windows job say, call the `pickle-run` action directly instead. It tak
 reads `github.token` without being handed one, and skips the merge.
 
 **Name the game image.** `game-image` and `game-branch` cannot both be empty. Set the first to an
-image the job pulls, or the second to a Steam branch it builds one from. On Windows, `game-image`
-is required: the image workflow here downloads the Linux depot and cannot produce a Windows ref.
+image the job pulls, or the second to a Steam branch it builds one from.
 
-**Windows cannot film or tunnel.** `platform: windows` refuses a non-zero `film-seconds` and
-`live-dashboard: true`. That script publishes only the game's own ports, and the ffmpeg it would
-mount is a Linux binary. An input it cannot honour fails the job rather than being dropped. It does
-read `suite-filter`.
+**Windows is refused.** `platform` takes `linux` only. The suite drives the container through
+`gamecrate`, which does not trust an exit code from a Proton launcher, so a Windows leg would
+report a failure for every run. Set `platform: windows` and the job fails with that reason rather
+than running and lying.
 
 **Leave the job room for every attempt.** `(retries + 1) * run-timeout + 15 < timeout-minutes`,
 where the 15 minutes is a fixed allowance for checkout, the build, the image pull and staging.
