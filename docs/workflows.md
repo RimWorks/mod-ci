@@ -33,7 +33,7 @@ install on a hit.
 
 ```yaml
   assetbundles:
-    uses: RimWorks/mod-ci/.github/workflows/assetbundles.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/assetbundles.yml@v4
     with:
       mods: |
         CosmereCore
@@ -76,7 +76,7 @@ on:
 
 jobs:
   analyze:
-    uses: RimWorks/mod-ci/.github/workflows/codeql.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/codeql.yml@v4
     permissions:
       contents: read
       security-events: write
@@ -97,7 +97,7 @@ on: pull_request_target
 
 jobs:
   automerge:
-    uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@v4
 ```
 
 ## `dotnet-build`
@@ -111,26 +111,28 @@ map. So the caller calls it once per version and composes the `game-images` pair
 ```yaml
 jobs:
   image-15:
-    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v4
     permissions:
       contents: read
       packages: write
     with:
       branch: version-1.5
+      image: ghcr.io/your-org/rimworld-game
     secrets: inherit
 
   image-16:
-    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v4
     permissions:
       contents: read
       packages: write
     with:
       branch: version-1.6.4633
+      image: ghcr.io/your-org/rimworld-game
     secrets: inherit
 
   build:
     needs: [image-15, image-16]
-    uses: RimWorks/mod-ci/.github/workflows/dotnet-build.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/dotnet-build.yml@v4
     permissions:
       contents: read
       checks: write
@@ -156,12 +158,13 @@ so a caller writes one job however many versions it needs.
 
 ```yaml
 images:
-  uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v3
+  uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v4
   permissions:
     contents: read
     packages: write
   with:
     artifact-prefix: ci-image-ref
+    image: ghcr.io/your-org/rimworld-game
     branches: |
       1.5=version-1.5
       1.6=version-1.6.4633
@@ -172,7 +175,7 @@ images:
 | --- | --- | --- |
 | `branches` | required | Newline `<game version>=<steam branch>` pairs. One image per line. |
 | `artifact-prefix` | required | Names the per-leg ref artifacts. A shared prefix makes two calls in one run collide. |
-| `image` | owner namespace | Repository to push to. |
+| `image` | required | Repository to push to. Name it, or the call fails before any image builds. |
 | `force` | `false` | Rebuilds even when the Steam buildid has not moved. |
 | `windows` | `false` | Also builds Windows images, under the Linux name plus `-windows`. |
 
@@ -199,7 +202,7 @@ that restores such a package gets every game type twice and fails with CS0433.
 
 ```yaml
 package-deps:
-  uses: RimWorks/mod-ci/.github/workflows/package-deps.yml@v3
+  uses: RimWorks/mod-ci/.github/workflows/package-deps.yml@v4
   permissions:
     contents: read
     packages: read
@@ -224,7 +227,7 @@ folder is renamed.
 
 ```yaml
   links:
-    uses: RimWorks/mod-ci/.github/workflows/links.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/links.yml@v4
     with:
       args: --config lychee.toml --no-progress README.md docs/
 ```
@@ -251,7 +254,7 @@ the same repo usually needs them.
 
 ```yaml
   dashboard:
-    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@v4
     with:
       working-directory: Dashboard
       lint: true
@@ -269,7 +272,7 @@ the copies drifted apart. That is the failure the release plumbing here exists t
 
 ```yaml
   suite:
-    uses: RimWorks/mod-ci/.github/workflows/pickle-suite.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/pickle-suite.yml@v4
     permissions:
       contents: read
       packages: write
@@ -290,6 +293,7 @@ the copies drifted apart. That is the failure the release plumbing here exists t
 | `mod-dirs` | string | `''` | Newline list of `checkout-path:MountName`. Empty mounts the repo root as `mod-name` |
 | `game-image` | string | `''` | Image to pull and run. Empty builds one from `game-branch` |
 | `game-branch` | string | `''` | Steam branch the image job downloads, such as `version-1.6.4871` |
+| `game-image-name` | string | `''` | Repository the image job pushes to. Empty uses `ghcr.io/<owner>/rimworld-game`. Only read when `game-image` is empty |
 | `game-version` | string | `'1.6'` | The `<version>` written into `ModsConfig.xml`. Not read from the image |
 | `backends` | string | `'["harmony"]'` | JSON array of `harmony`, `concord` or `both`. One matrix leg per entry |
 | `mod-sets` | string | `''` | JSON array of `{name, backend, extraMods}`. Replaces `backends`, and its legs report instead of gating |
@@ -363,7 +367,7 @@ after it, such as a docs catalogue check.
 
 ```yaml
   prose:
-    uses: RimWorks/mod-ci/.github/workflows/prose.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/prose.yml@v4
 ```
 
 A multi-version mod runs the `verify-ship-list` CLI in `prepareCmd`, after the last
@@ -380,7 +384,7 @@ something first.
 ```yaml
   sonar:
     needs: image
-    uses: RimWorks/mod-ci/.github/workflows/sonar.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/sonar.yml@v4
     with:
       solution: RimWorks.RimLogging.sln
       project-key: RimWorks_rimworld-logging-framework
@@ -422,7 +426,7 @@ where a scanner run does not need a build.
 
 ```yaml
   scan:
-    uses: RimWorks/mod-ci/.github/workflows/sonar-scan.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/sonar-scan.yml@v4
     with:
       project-key: RimWorks_your-repo
     secrets:
@@ -441,5 +445,5 @@ Installs Node 22 and runs `npm test`. It suits a plain Node repo with no build s
 
 ```yaml
   test:
-    uses: RimWorks/mod-ci/.github/workflows/test.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/test.yml@v4
 ```

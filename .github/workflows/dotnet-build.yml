@@ -109,7 +109,7 @@ jobs:
       # private members cannot compile against a reference package at all.
       - name: Stage game assemblies
         id: refs
-        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v3
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
         with:
           image: ${{ matrix.image }}
 

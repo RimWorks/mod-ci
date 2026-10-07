@@ -14,9 +14,11 @@ on:
         type: string
         required: true
       image:
-        description: Image to push. Defaults to the caller's owner namespace.
+        description: >
+          Repository to push to. Required and named by the caller, so no repo publishes an
+          image it never asked for.
         type: string
-        default: ''
+        required: true
       artifact-prefix:
         description: >
           Names the per-leg ref artifacts. Required, and it has to differ per caller: two calls
@@ -110,7 +112,7 @@ jobs:
           branch: ${{ matrix.branch }}
           variant: linux
           aliases: ${{ matrix.version }}
-          image: ${{ inputs.image != '' && inputs.image || format('ghcr.io/{0}/rimworld-game', github.repository_owner) }}
+          image: ${{ inputs.image }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}
 
@@ -163,7 +165,7 @@ jobs:
           variant: windows
           aliases: ${{ matrix.version }}
           base-image: ${{ inputs.windows-base-image }}
-          image: ${{ inputs.image != '' && format('{0}-windows', inputs.image) || format('ghcr.io/{0}/rimworld-game-windows', github.repository_owner) }}
+          image: ${{ format('{0}-windows', inputs.image) }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           skip-if-unchanged: ${{ inputs.force && 'false' || 'true' }}
 

@@ -31,6 +31,11 @@ on:
         description: Steam branch the internal image job downloads, for example version-1.6.4871.
         type: string
         default: ''
+      game-image-name:
+        description: >
+          Repository the internal image job pushes to. Only read when game-image is empty.
+        type: string
+        default: ''
       game-version:
         description: "<version> written into ModsConfig.xml, and the GameVersion the build compiles as. Not derived from the image."
         type: string
@@ -197,7 +202,7 @@ jobs:
     needs: sets
     if: inputs.game-image == ''
     # pinned rather than ./ so the call cannot resolve against a consumer's own game-image.yml
-    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v3
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v4
     permissions:
       contents: read
       packages: write
@@ -207,6 +212,7 @@ jobs:
     with:
       artifact-prefix: pickle-suite-image-ref
       branches: ${{ inputs.game-version }}=${{ inputs.game-branch }}
+      image: ${{ inputs.game-image-name != '' && inputs.game-image-name || format('ghcr.io/{0}/rimworld-game', github.repository_owner) }}
 
   suite:
     name: suite (${{ matrix.set.name }})
@@ -259,7 +265,7 @@ jobs:
       - name: Stage game assemblies
         id: refs
         if: inputs.build-command != ''
-        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v3
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
         with:
           image: ${{ inputs.game-image != '' && inputs.game-image || fromJSON(needs.game-image.outputs.image-refs || '{}')[inputs.game-version] }}
 
@@ -270,7 +276,7 @@ jobs:
           GameManagedDir: ${{ steps.refs.outputs.managed-dir }}
         run: ${{ inputs.build-command }}
 
-      - uses: RimWorks/mod-ci/.github/actions/pickle-run@v3
+      - uses: RimWorks/mod-ci/.github/actions/pickle-run@v4
         with:
           game-image: ${{ inputs.game-image != '' && inputs.game-image || fromJSON(needs.game-image.outputs.image-refs || '{}')[inputs.game-version] }}
           mod-name: ${{ inputs.mod-name }}
