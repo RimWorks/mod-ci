@@ -4,7 +4,8 @@ import { appendFileSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const EXIT_FAIL = 1;
+const EXIT_USAGE = 1;
+const EXIT_FAIL = 20;
 const EXIT_NO_REPORT = 2;
 const EXIT_RETRY = 75;
 
@@ -271,7 +272,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const containerLog = process.argv[5] || process.env.CONTAINER_LOG;
   if (!dir || !stamp || !containerLog) {
     process.stderr.write('usage: verdict.mjs <report-dir> <status> <stamp> <container-log>\n');
-    process.exit(EXIT_FAIL);
+    process.exit(EXIT_USAGE);
   }
 
   const { code, markdown, notices } = decide({

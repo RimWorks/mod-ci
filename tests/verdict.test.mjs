@@ -144,7 +144,7 @@ test('a scenario failure never reaches a retry, even with an X death in the log'
   });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
 
-  assert.equal(decide(run).code, 1);
+  assert.equal(decide(run).code, 20);
 });
 
 test('names the failing step and its message in the table', async (t) => {
@@ -165,7 +165,7 @@ test('names the failing step and its message in the table', async (t) => {
 
   const { code, markdown } = decide(run);
 
-  assert.equal(code, 1);
+  assert.equal(code, 20);
   assert.match(markdown, /7 of 73 scenarios failed/);
   assert.match(markdown, /\| spike\.feature \| spawns a spike \| Then the mod loads \| Could not load/);
 });
@@ -185,7 +185,7 @@ test('an empty run prints what the filter should have matched', async (t) => {
 
   const { code, markdown } = decide(run);
 
-  assert.equal(code, 1);
+  assert.equal(code, 20);
   assert.match(markdown, /Zero scenarios ran/);
   assert.match(markdown, /3 features in Pickle/);
   assert.ok(!markdown.includes('unrelated trailing line'));
@@ -199,7 +199,7 @@ test('labels the counts partial when the watchdog killed the run', async (t) => 
 
   const { code, markdown } = decide(run);
 
-  assert.equal(code, 1);
+  assert.equal(code, 20);
   assert.match(markdown, /counts are partial/);
 });
 
@@ -264,14 +264,33 @@ test('a bare boot line counts as loaded', async (t) => {
   assert.doesNotMatch(decide(run).markdown, /Pickle never loaded/);
 });
 
-test('a leg that reported keeps exit 1, so a comparison leg can absorb it', async (t) => {
+test('a leg that reported keeps its failure code, so a comparison leg can absorb it', async (t) => {
   const run = await fixture({
     'summary.json': JSON.stringify({ total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, exitReason: 'failed' }),
     'container.log': 'exit 1\n',
   });
   t.after(() => rm(run.dir, { recursive: true, force: true }));
 
-  assert.equal(decide(run).code, 1);
+  assert.equal(decide(run).code, 20);
+});
+
+test('no decision uses exit 1, which belongs to verdict.mjs failing to run at all', async (t) => {
+  const runs = await Promise.all([
+    fixture({ 'summary.json': passing }),
+    fixture({ 'summary.json': { total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, exitReason: 'failed' } }),
+    fixture({ 'summary.json': { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, exitReason: 'passed' } }),
+    fixture({ 'summary.json': { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, exitReason: 'in-progress' } }),
+    fixture({ 'summary.json': 'not json' }),
+    fixture({ 'Player.log': `boot\n${XIO}\n` }),
+    fixture({ 'container.log': 'exit 1\n' }),
+  ]);
+  t.after(() => Promise.all(runs.map((run) => rm(run.dir, { recursive: true, force: true }))));
+
+  for (const run of runs) {
+    assert.notEqual(decide(run).code, 1, `decide returned 1 for a run under ${run.dir}`);
+  }
+
+  assert.notEqual(decide({ ...runs[0], stamp: join(runs[0].dir, 'nope') }).code, 1);
 });
 
 test('the eight checks keep their order and their numbers', () => {

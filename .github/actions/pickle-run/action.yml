@@ -190,7 +190,7 @@ runs:
 
           if [[ "$verdict" != 75 ]]; then
             # a comparison absorbs a verdict that read a report. 2 means there was none to read
-            if [[ "$REPORT_ONLY" == "true" && "$verdict" != 2 ]]; then
+            if [[ "$REPORT_ONLY" == "true" && ( "$verdict" == 0 || "$verdict" == 20 ) ]]; then
               if [[ "$verdict" != 0 ]]; then
                 echo "::warning title=Pickle suite::verdict $verdict, reported not gated"
               fi
