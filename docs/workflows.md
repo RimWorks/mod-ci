@@ -126,7 +126,7 @@ jobs:
       contents: read
       packages: write
     with:
-      branch: version-1.6.4633
+      branch: public
       image: ghcr.io/your-org/rimworld-game
     secrets: inherit
 
@@ -167,7 +167,7 @@ images:
     image: ghcr.io/your-org/rimworld-game
     branches: |
       1.5=version-1.5
-      1.6=version-1.6.4633
+      1.6=public
   secrets: inherit
 ```
 
@@ -187,7 +187,7 @@ A malformed line, a repeated version or an empty list fails the `prepare` job be
 builds. The Windows legs return `outputs.windows-image-refs` and are allowed to fail without
 failing the caller.
 
-Each leg also gets a short moving tag from its version, so `1.6=version-1.6.4633` publishes
+Each leg also gets a short moving tag from its version, so `1.6=public` publishes
 `<image>:1.6` alongside the build-numbered tag. A consumer can pull the short ref and always get
 the newest image built for that game version.
 

@@ -8,7 +8,7 @@ on:
         type: string
         default: |
           1.5=version-1.5
-          1.6=version-1.6.4633
+          1.6=public
       windows:
         description: Also build the Windows images.
         type: boolean

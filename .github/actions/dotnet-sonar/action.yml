@@ -88,6 +88,7 @@ runs:
         UNACTIONABLE_RULES: |
           githubactions:S7637=.github/workflows/*.yml
           csharpsquid:S1135=**/*.cs
+          csharpsquid:S3011=**/*.cs
         SCANNER: ${{ runner.temp }}/scanner/dotnet-sonarscanner
         # git bash rewrites a leading-slash arg into a windows path, stripping the slash
         MSYS2_ARG_CONV_EXCL: "*"
