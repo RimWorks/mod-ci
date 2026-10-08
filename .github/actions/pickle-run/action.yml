@@ -145,7 +145,7 @@ runs:
         set -euo pipefail
         npm install -g --no-fund --no-audit \
           "@gamecrate/cli@$GAMECRATE_VERSION" "@gamecrate/rimworld@$GAMECRATE_PLUGIN_VERSION"
-        gamecrate --help >/dev/null
+        (cd "$RUNNER_TEMP" && gamecrate --help >/dev/null)
 
     # stage-mods.sh lives one directory over so a staging-only consumer can use it without the runner
     - name: Stage the mods and config
