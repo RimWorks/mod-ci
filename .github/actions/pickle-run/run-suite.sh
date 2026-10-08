@@ -108,6 +108,16 @@ fi
 
 args+=(-- "${game_args[@]}" -pickle-report-dir=/out -logfile /out/Player.log)
 
+export XDG_CONFIG_HOME="$TMP/gamecrate-config"
+mkdir -p "$XDG_CONFIG_HOME/gamecrate"
+cat > "$XDG_CONFIG_HOME/gamecrate/config.yml" <<'YML'
+games:
+  rimworld:
+    image:
+      updates:
+        check: false
+YML
+
 printf 'gamecrate'; printf ' %q' "${args[@]}"; printf '\n'
 
 gamecrate "${args[@]}" > "$TMP/container.log" 2>&1 &

@@ -59,6 +59,7 @@ async function suite(platform, env = {}, dockerExit = '0', modsConfig = null) {
   }).catch((e) => e);
 
   return {
+    root,
     code: result.code ?? 0,
     stderr: await readFile(err, 'utf8'),
     argv: (await readFile(argv, 'utf8')).split('\n'),
@@ -182,6 +183,14 @@ test('matches a mod by its own packageId, not by one it declares a dependency on
 
   const refs = (await readFile(argvFile, 'utf8')).split('\n').filter((a) => a.startsWith('path:'));
   assert.deepEqual(refs.map((r) => r.split('/').pop()), ['Dep', 'App']);
+});
+
+test('turns the update check off, since it wants a steam account no runner has', async () => {
+  const { root } = await suite('linux', { UNFILTERED: 'true' });
+
+  const written = await readFile(join(root, 'gamecrate-config', 'gamecrate', 'config.yml'), 'utf8');
+
+  assert.match(written, /check: false/);
 });
 
 test('passes --ci, so a committed .gamecrate.yml cannot swap the mod set', async () => {
