@@ -42,16 +42,28 @@ MODS_CONFIG="$CONFIG_DIR/ModsConfig.xml"
 [[ -f "$MODS_CONFIG" ]] ||
   { echo "error: no ModsConfig.xml at $MODS_CONFIG, so nothing names the load order" >&2; exit 1; }
 
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+own_ids=()
+own_dirs=()
+for dir in "$MODS_DIR"/*/; do
+  [[ -f "$dir/About/About.xml" ]] || continue
+  first_package_id="$(sed -n 's|.*<packageId>\([^<]*\)</packageId>.*|\1|p' "$dir/About/About.xml" | head -1)"
+  [[ -n "$first_package_id" ]] ||
+    { echo "error: ${dir%/}/About/About.xml declares no packageId" >&2; exit 1; }
+  own_ids+=("$(lower "$first_package_id")")
+  own_dirs+=("${dir%/}")
+done
+
 mod_refs=()
 while read -r id; do
   [[ -n "$id" && "$id" != ludeon.* ]] || continue
+  want="$(lower "$id")"
   found=''
-  for dir in "$MODS_DIR"/*/; do
-    [[ -f "$dir/About/About.xml" ]] || continue
-    if grep -qiF "<packageId>$id</packageId>" "$dir/About/About.xml"; then
-      found="${dir%/}"
-      break
-    fi
+  for i in "${!own_ids[@]}"; do
+    [[ "${own_ids[$i]}" == "$want" ]] || continue
+    found="${own_dirs[$i]}"
+    break
   done
   [[ -n "$found" ]] ||
     { echo "error: ModsConfig.xml lists '$id' and no folder under $MODS_DIR declares it" >&2; exit 1; }
@@ -95,6 +107,8 @@ if [[ "$LIVE_DASHBOARD" == "true" ]]; then
 fi
 
 args+=(-- "${game_args[@]}" -pickle-report-dir=/out -logfile /out/Player.log)
+
+printf 'gamecrate'; printf ' %q' "${args[@]}"; printf '\n'
 
 gamecrate "${args[@]}" > "$TMP/container.log" 2>&1 &
 game=$!

@@ -146,6 +146,44 @@ test('keeps the ModsConfig load order, so the mod under test still loads last', 
   assert.deepEqual(refs.map((r) => r.split('/').pop()), ['Dep', 'Mine']);
 });
 
+test('matches a mod by its own packageId, not by one it declares a dependency on', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'run-suite-dep-'));
+  const bin = join(root, 'bin');
+  await mkdir(bin);
+  await mkdir(join(root, 'config'));
+  await mkdir(join(root, 'mods', 'Dep', 'About'), { recursive: true });
+  await writeFile(join(root, 'mods', 'Dep', 'About', 'About.xml'),
+    '<ModMetaData><packageId>RimWorks.RimLogging</packageId></ModMetaData>');
+  await mkdir(join(root, 'mods', 'App', 'About'), { recursive: true });
+  await writeFile(join(root, 'mods', 'App', 'About', 'About.xml'), [
+    '<ModMetaData><packageId>rimworks.pickle</packageId>',
+    '<modDependencies><li><packageId>RimWorks.RimLogging</packageId></li></modDependencies>',
+    '</ModMetaData>',
+  ].join('\n'));
+  await writeFile(join(root, 'config', 'ModsConfig.xml'), [
+    '<ModsConfigData><activeMods>',
+    '  <li>rimworks.rimlogging</li>',
+    '  <li>rimworks.pickle</li>',
+    '</activeMods></ModsConfigData>',
+  ].join('\n'));
+  await writeFile(join(bin, 'gamecrate'), [
+    '#!/usr/bin/env bash',
+    'printf "%s\\n" "$@" >> "$DOCKER_ARGV"',
+    'exit 0',
+  ].join('\n'), { mode: 0o755 });
+
+  const argvFile = join(root, 'argv');
+  await writeFile(argvFile, '');
+  await run('timeout', ['-s', 'KILL', '30', 'bash', '-c',
+    'exec bash "$0" "$@" > /dev/null 2>&1', scripts.linux,
+    'example/image', join(root, 'mods'), join(root, 'config'), join(root, 'reports')], {
+    env: { PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: root, DOCKER_ARGV: argvFile, UNFILTERED: 'true' },
+  }).catch((e) => e);
+
+  const refs = (await readFile(argvFile, 'utf8')).split('\n').filter((a) => a.startsWith('path:'));
+  assert.deepEqual(refs.map((r) => r.split('/').pop()), ['Dep', 'App']);
+});
+
 test('passes --ci, so a committed .gamecrate.yml cannot swap the mod set', async () => {
   const { argv } = await suite('linux', { UNFILTERED: 'true' });
 
