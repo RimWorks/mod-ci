@@ -73,7 +73,7 @@ if [[ -n "$RUN_TIMEOUT" ]]; then
   game_args+=("-pickle-run-timeout=$RUN_TIMEOUT")
 fi
 
-args=(run --game rimworld --image "$IMAGE" --mode headless --plain)
+args=(run --ci --game rimworld --image "$IMAGE" --mode headless --plain)
 if [[ -n "$RUN_TIMEOUT" ]]; then
   args+=(--timeout "$((RUN_TIMEOUT * 60 + 120))")
 fi

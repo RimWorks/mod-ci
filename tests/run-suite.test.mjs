@@ -146,6 +146,14 @@ test('keeps the ModsConfig load order, so the mod under test still loads last', 
   assert.deepEqual(refs.map((r) => r.split('/').pop()), ['Dep', 'Mine']);
 });
 
+test('passes --ci, so a committed .gamecrate.yml cannot swap the mod set', async () => {
+  const { argv } = await suite('linux', { UNFILTERED: 'true' });
+
+  assert.equal(argv[0], 'run');
+  assert.equal(argv[1], '--ci');
+  assert.ok(argv.includes('--game'), 'a bare --ci cannot infer the game with no ci profile');
+});
+
 test('splits every docker-arg into its own flag, which is the only form docker accepts', async () => {
   const { argv } = await suite('linux', { UNFILTERED: 'true' });
 

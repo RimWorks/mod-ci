@@ -39,8 +39,11 @@ inputs:
     description: linux. windows is refused while gamecrate cannot trust a proton exit code
     default: linux
   gamecrate-version:
-    description: Version of @gamecrate/cli and @gamecrate/rimworld to install. 3.2.0 is the first with config-free run
-    default: '3.2.0'
+    description: Version of @gamecrate/cli to install. 3.3.0 is the first with --ci
+    default: '3.3.0'
+  gamecrate-plugin-version:
+    description: Version of @gamecrate/rimworld to install. Versioned apart from the cli
+    default: '2.2.0'
   film-seconds:
     description: Value for -pickle-max-film-seconds. 0 skips the ffmpeg download
     default: '0'
@@ -127,10 +130,11 @@ runs:
       shell: bash
       env:
         GAMECRATE_VERSION: ${{ inputs.gamecrate-version }}
+        GAMECRATE_PLUGIN_VERSION: ${{ inputs.gamecrate-plugin-version }}
       run: |
         set -euo pipefail
         npm install -g --no-fund --no-audit \
-          "@gamecrate/cli@$GAMECRATE_VERSION" "@gamecrate/rimworld@$GAMECRATE_VERSION"
+          "@gamecrate/cli@$GAMECRATE_VERSION" "@gamecrate/rimworld@$GAMECRATE_PLUGIN_VERSION"
         gamecrate --help >/dev/null
 
     # stage-mods.sh lives one directory over so a staging-only consumer can use it without the runner
