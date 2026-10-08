@@ -272,8 +272,12 @@ test('writes no library block when nothing is pinned, so the config stays the on
 });
 
 test('passes a profile as the run positional, so a committed .gamecrate.yml can name the mods', async () => {
-  const { argv } = await suite('linux', { UNFILTERED: 'true', GAMECRATE_PROFILE: 'ci' });
+  const { argv } = await suite('linux', { UNFILTERED: 'true', GAMECRATE_PROFILE: 'pickle' });
   assert.equal(argv[0], 'run');
-  assert.equal(argv[1], 'ci');
-  assert.equal(argv[2], '--ci');
+  assert.equal(argv[1], 'pickle');
+});
+
+test('drops --ci beside a named profile, which gamecrate refuses as a contradiction', async () => {
+  const { argv } = await suite('linux', { UNFILTERED: 'true', GAMECRATE_PROFILE: 'pickle' });
+  assert.ok(!argv.includes('--ci'));
 });

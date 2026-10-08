@@ -110,8 +110,10 @@ fi
 args=(run)
 if [[ -n "$GAMECRATE_PROFILE" ]]; then
   args+=("$GAMECRATE_PROFILE")
+else
+  args+=(--ci)
 fi
-args+=(--ci --game rimworld --image "$IMAGE" --mode headless --plain)
+args+=(--game rimworld --image "$IMAGE" --mode headless --plain)
 if [[ -n "$RUN_TIMEOUT" ]]; then
   args+=(--timeout "$((RUN_TIMEOUT * 60 + 120))")
 fi
