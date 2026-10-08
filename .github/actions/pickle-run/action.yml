@@ -23,6 +23,16 @@ inputs:
   staged-mods:
     description: "Comma separated owner/repo:AssetPrefix:packageId of extra mods to download"
     default: ''
+  workshop-mods:
+    description: >
+      Newline list of packageId:publishedFileId. gamecrate downloads each one from the Steam
+      Workshop during the run, anonymously, along with its own workshop dependencies
+    default: ''
+  gamecrate-profile:
+    description: >
+      Profile name passed to gamecrate run, so a consumer's committed .gamecrate.yml can name
+      the mods it wants loaded. Empty runs with no profile
+    default: ''
   pickle-version:
     description: "Pickle release to stage: 'self' when the checkout is Pickle, empty to float to latest, a release tag, or 'none'"
     default: ''
@@ -146,15 +156,26 @@ runs:
         MOD_PACKAGE_ID: ${{ inputs.mod-package-id }}
         GAME_VERSION: ${{ inputs.game-version }}
         STAGED_MODS: ${{ inputs.staged-mods }}
+        WORKSHOP_MODS: ${{ inputs.workshop-mods }}
         PICKLE_VERSION: ${{ inputs.pickle-version }}
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         "${{ github.action_path }}/../stage-mods/stage-mods.sh" \
           "${{ inputs.backend }}" "$RUNNER_TEMP/mods" "$RUNNER_TEMP/config"
 
+    - name: Cache the workshop downloads
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.local/share/gamecrate/steam/steamapps/workshop/content/294100
+          ~/.local/share/gamecrate/steam/steamapps/workshop/appworkshop_294100.acf
+        key: gamecrate-workshop-294100-${{ github.run_id }}-${{ inputs.leg-index }}
+        restore-keys: gamecrate-workshop-294100-
+
     - name: Run the suite and judge it
       shell: bash
       env:
+        GAMECRATE_PROFILE: ${{ inputs.gamecrate-profile }}
         GAME_IMAGE: ${{ inputs.game-image }}
         PLATFORM: ${{ inputs.platform }}
         REPORT_DIR: ${{ inputs.report-dir }}

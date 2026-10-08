@@ -52,6 +52,14 @@ on:
         description: "Comma separated owner/repo:AssetPrefix:packageId of extra mods every leg stages."
         type: string
         default: ''
+      workshop-mods:
+        description: "Newline list of packageId:publishedFileId. Downloaded from the Steam Workshop during the run."
+        type: string
+        default: ''
+      gamecrate-profile:
+        description: Profile name for gamecrate run, so a committed .gamecrate.yml can name the mods to load.
+        type: string
+        default: ''
       pickle-version:
         description: "Pickle release to stage: 'self' when the checkout is Pickle, empty to float to latest, a tag, or 'none'."
         type: string
@@ -143,6 +151,7 @@ jobs:
           BACKENDS: ${{ inputs.backends }}
           MOD_SETS: ${{ inputs.mod-sets }}
           STAGED_MODS: ${{ inputs.staged-mods }}
+          WORKSHOP_MODS: ${{ inputs.workshop-mods }}
         run: |
           set -euo pipefail
 
@@ -192,6 +201,12 @@ jobs:
             [.set[] | .staged | select(. != "") | split(",")[]
              | select((split(":") | length) != 3)] | join(", ")' <<< "$matrix")"
           [[ -z "$malformed" ]] || die "staged mod '$malformed' is not owner/repo:AssetPrefix:packageId"
+
+          bad_pin="$(while read -r pin; do
+            [[ -n "${pin// /}" ]] || continue
+            [[ "$pin" =~ ^[^[:space:]:]+:[0-9]+$ ]] || printf '%s ' "$pin"
+          done <<< "$WORKSHOP_MODS")"
+          [[ -z "$bad_pin" ]] || die "workshop mod '$bad_pin' is not packageId:publishedFileId"
 
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "$matrix" | jq .
@@ -284,6 +299,8 @@ jobs:
           backend: ${{ matrix.set.backend }}
           game-version: ${{ inputs.game-version }}
           staged-mods: ${{ matrix.set.staged }}
+          workshop-mods: ${{ inputs.workshop-mods }}
+          gamecrate-profile: ${{ inputs.gamecrate-profile }}
           pickle-version: ${{ inputs.pickle-version }}
           suite-filter: ${{ inputs.suite-filter }}
           unfiltered: ${{ inputs.unfiltered }}

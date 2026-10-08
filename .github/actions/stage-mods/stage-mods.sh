@@ -10,9 +10,11 @@ MOD_NAME="${MOD_NAME:-}"
 MOD_PACKAGE_ID="${MOD_PACKAGE_ID:?the packageId of the mod under test, one per line}"
 GAME_VERSION="${GAME_VERSION:-1.6}"
 STAGED_MODS="${STAGED_MODS:-}"
+WORKSHOP_MODS="${WORKSHOP_MODS:-}"
 PICKLE_VERSION="${PICKLE_VERSION:-}"
 
 PICKLE_REPO="RimWorks/Rimworld-Pickle"
+RIMLOGGING_PIN="RimWorks.RimLogging:3733484696"
 
 die() {
   echo "error: $*" >&2
@@ -68,6 +70,38 @@ if [[ -n "$STAGED_MODS" ]]; then
   done
 fi
 
+workshop_ids=()
+workshop_items=()
+while read -r entry; do
+  [[ -n "$entry" ]] || continue
+  package_id="${entry%:*}"
+  item="${entry##*:}"
+  [[ "$entry" == *:* && -n "$package_id" && "$item" =~ ^[0-9]+$ ]] ||
+    die "workshop mod '$entry' is not packageId:publishedFileId"
+  [[ "$package_id" != *[[:space:]]* ]] ||
+    die "workshop mod '$entry' has whitespace in its packageId, so it is a mod name rather than a packageId"
+  workshop_ids+=("$package_id")
+  workshop_items+=("$item")
+done <<< "$RIMLOGGING_PIN
+$WORKSHOP_MODS"
+
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+claimed_ids=("${caller_ids[@]}" "${staged_ids[@]}" rimworks.pickle brrainz.harmony concordlib.concord)
+for i in "${!workshop_ids[@]}"; do
+  want="$(lower "${workshop_ids[$i]}")"
+  for j in "${!workshop_ids[@]}"; do
+    (( j > i )) || continue
+    [[ "$want" != "$(lower "${workshop_ids[$j]}")" ]] ||
+      die "workshop mod '${workshop_ids[$i]}' is pinned twice, to ${workshop_items[$i]} and ${workshop_items[$j]}"
+  done
+  for claimed in "${claimed_ids[@]}"; do
+    [[ "$want" != "$(lower "$claimed")" ]] ||
+      die "workshop mod '${workshop_ids[$i]}' is also staged from a checkout or a release," \
+          "so the workshop copy and the build under test would both claim that packageId"
+  done
+done
+
 reserved_names=()
 reserved_owners=()
 reserve() {
@@ -77,7 +111,6 @@ reserve() {
 
 [[ "$BACKENDS" == "harmony" ]] || reserve Concord "the Concord patch backend"
 [[ "$BACKENDS" == "concord" ]] || reserve Harmony "the Harmony patch backend"
-reserve RimLogging "the RimLogging framework"
 [[ "$PICKLE_VERSION" == "self" || "$PICKLE_VERSION" == "none" ]] ||
   reserve Pickle "Pickle (PICKLE_VERSION '${PICKLE_VERSION:-latest}')"
 
@@ -172,8 +205,6 @@ if [[ "$BACKENDS" == "harmony" || "$BACKENDS" == "both" ]]; then
   active+=(brrainz.harmony)
 fi
 
-stage_release_zip "RimWorks/rimworld-logging-framework" "RimLogging-" "$MODS_DIR/RimLogging"
-
 active+=(
   ludeon.rimworld
   ludeon.rimworld.royalty
@@ -181,8 +212,9 @@ active+=(
   ludeon.rimworld.biotech
   ludeon.rimworld.anomaly
   ludeon.rimworld.odyssey
-  rimworks.rimlogging
 )
+
+active+=("${workshop_ids[@]}")
 
 for i in "${!staged_repos[@]}"; do
   repo="${staged_repos[$i]}"
@@ -200,6 +232,12 @@ fi
 
 # The caller loads last, after everything it depends on.
 active+=("${caller_ids[@]}")
+
+: > "$CONFIG_DIR/workshop-pins.txt"
+for i in "${!workshop_ids[@]}"; do
+  printf '%s %s\n' "$(lower "${workshop_ids[$i]}")" "${workshop_items[$i]}" \
+    >> "$CONFIG_DIR/workshop-pins.txt"
+done
 
 cat > "$CONFIG_DIR/ModsConfig.xml" <<EOF
 <?xml version="1.0" encoding="utf-8"?>

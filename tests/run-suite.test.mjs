@@ -15,7 +15,7 @@ const scripts = {
 
 // A stub docker records the argv it was handed and returns whatever exit code the case wants,
 // so nothing here pulls an image or starts a game.
-async function suite(platform, env = {}, dockerExit = '0', modsConfig = null) {
+async function suite(platform, env = {}, dockerExit = '0', modsConfig = null, pins = null) {
   const root = await mkdtemp(join(tmpdir(), 'run-suite-'));
   const bin = join(root, 'bin');
   await mkdir(bin);
@@ -30,6 +30,7 @@ async function suite(platform, env = {}, dockerExit = '0', modsConfig = null) {
     '  <li>cryptik.mymod</li>',
     '</activeMods></ModsConfigData>',
   ].join('\n'));
+  if (pins !== null) await writeFile(join(root, 'config', 'workshop-pins.txt'), pins);
   for (const name of ['docker', 'gamecrate']) {
     await writeFile(join(bin, name), [
       '#!/usr/bin/env bash',
@@ -219,7 +220,7 @@ test('refuses a ModsConfig id that no staged folder declares', async () => {
   ].join('\n'));
 
   assert.equal(code, 1);
-  assert.match(stderr, /lists 'nobody\.ghost' and no folder/);
+  assert.match(stderr, /lists 'nobody\.ghost', and no folder/);
 });
 
 test('mounts the config directory where the game looks for it on windows', async () => {
@@ -246,3 +247,33 @@ for (const platform of ['linux', 'windows']) {
     assert.equal(await readFile(join(root, 'container.log'), 'utf8'), '');
   });
 }
+
+test('a workshop-pinned id becomes a library ref, so gamecrate downloads it instead of needing a folder', async () => {
+  const { code, argv, root } = await suite('linux', { UNFILTERED: 'true' }, '0', [
+    '<ModsConfigData><activeMods>',
+    '  <li>RimWorks.RimLogging</li>',
+    '  <li>cryptik.mymod</li>',
+    '</activeMods></ModsConfigData>',
+  ].join('\n'), 'rimworks.rimlogging 3733484696\n');
+
+  assert.equal(code, 0);
+  const at = argv.indexOf('RimWorks.RimLogging');
+  assert.ok(at > 0, 'the pinned id is passed as a bare ref, which resolves through the library');
+  assert.equal(argv[at - 1], '--mod');
+
+  const config = await readFile(join(root, 'gamecrate-config', 'gamecrate', 'config.yml'), 'utf8');
+  assert.match(config, /library:\n {6}rimworks\.rimlogging:\n {8}workshop: 3733484696/);
+});
+
+test('writes no library block when nothing is pinned, so the config stays the one gamecrate validates', async () => {
+  const { root } = await suite('linux', { UNFILTERED: 'true' });
+  const config = await readFile(join(root, 'gamecrate-config', 'gamecrate', 'config.yml'), 'utf8');
+  assert.ok(!config.includes('library:'));
+});
+
+test('passes a profile as the run positional, so a committed .gamecrate.yml can name the mods', async () => {
+  const { argv } = await suite('linux', { UNFILTERED: 'true', GAMECRATE_PROFILE: 'ci' });
+  assert.equal(argv[0], 'run');
+  assert.equal(argv[1], 'ci');
+  assert.equal(argv[2], '--ci');
+});

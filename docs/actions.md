@@ -203,6 +203,12 @@ than a Pickle suite, and needs the staging without the runner.
           pickle-version: none
 ```
 
+`workshop-mods` takes newline `packageId:publishedFileId` pairs. The script does not download
+them. It writes them to `workshop-pins.txt` beside `ModsConfig.xml`, and whoever launches the game
+resolves them. `pickle-run` hands them to gamecrate, which downloads each item anonymously, follows
+its workshop dependencies, and skips anything already in the cache. RimLogging is pinned this way
+for every caller.
+
 `pickle-version: none` stages no Pickle at all. Leave it empty to take the latest release, pass a
 release tag to pin one, or `self` when the checkout is Pickle. `mod-dirs` takes newline
 `checkout-path:MountName` pairs for a repo with several mods in it, and `mod-name` is the mount name

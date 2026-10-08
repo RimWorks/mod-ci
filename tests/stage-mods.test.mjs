@@ -155,3 +155,43 @@ test('a floating pickle-version stages Pickle and lists it before the caller', a
   assert.ok(existsSync(join(root, 'mods', 'Pickle', 'About', 'About.xml')));
   assert.ok(config.indexOf('rimworks.pickle') < config.indexOf('rimworks.example'));
 });
+
+test('pins RimLogging to the workshop rather than staging its release zip', async () => {
+  const root = await stageFully({});
+
+  const pins = await readFile(join(root, 'config', 'workshop-pins.txt'), 'utf8');
+  assert.match(pins, /^rimworks\.rimlogging 3733484696$/m);
+  assert.ok(!existsSync(join(root, 'mods', 'RimLogging')), 'nothing downloads the release zip now');
+
+  const config = await readFile(join(root, 'config', 'ModsConfig.xml'), 'utf8');
+  assert.match(config, /<li>RimWorks\.RimLogging<\/li>/);
+});
+
+test('puts a caller workshop pin in the pins file and in the load order before its own mod', async () => {
+  const root = await stageFully({ WORKSHOP_MODS: 'Dubwise.DubsBadHygiene:836308268' });
+
+  const pins = await readFile(join(root, 'config', 'workshop-pins.txt'), 'utf8');
+  assert.match(pins, /^dubwise\.dubsbadhygiene 836308268$/m);
+
+  const config = await readFile(join(root, 'config', 'ModsConfig.xml'), 'utf8');
+  assert.ok(config.indexOf('Dubwise.DubsBadHygiene') < config.indexOf('rimworks.example'));
+});
+
+test('refuses a workshop pin with no published file id, which would download nothing', async () => {
+  assert.match(await stage({ WORKSHOP_MODS: 'Dubwise.DubsBadHygiene' }),
+    /is not packageId:publishedFileId/);
+});
+
+test('refuses a workshop pin whose id is a workshop url, not a published file id', async () => {
+  assert.match(await stage({ WORKSHOP_MODS: 'Dubwise.DubsBadHygiene:https://x/?id=1' }),
+    /is not packageId:publishedFileId/);
+});
+
+test('refuses the same packageId pinned twice, where the second pin would silently win', async () => {
+  assert.match(await stage({ WORKSHOP_MODS: 'A.B:1\na.b:2' }), /is pinned twice/);
+});
+
+test('refuses a workshop pin the mod under test already claims', async () => {
+  assert.match(await stage({ WORKSHOP_MODS: 'RimWorks.Example:836308268' }),
+    /is also staged from a checkout or a release/);
+});

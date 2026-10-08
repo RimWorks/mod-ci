@@ -13,6 +13,7 @@ LIVE_DASHBOARD="${LIVE_DASHBOARD:-false}"
 DASHBOARD_PORT="${DASHBOARD_PORT:-27750}"
 SET_NAME="${SET_NAME:-}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-}"
+GAMECRATE_PROFILE="${GAMECRATE_PROFILE:-}"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="${RUNNER_TEMP:-/tmp}"
@@ -55,10 +56,31 @@ for dir in "$MODS_DIR"/*/; do
   own_dirs+=("${dir%/}")
 done
 
+pinned_ids=()
+pinned_items=()
+PINS="$CONFIG_DIR/workshop-pins.txt"
+if [[ -f "$PINS" ]]; then
+  while read -r id item; do
+    [[ -n "$id" && -n "$item" ]] || continue
+    pinned_ids+=("$id")
+    pinned_items+=("$item")
+  done < "$PINS"
+fi
+
 mod_refs=()
 while read -r id; do
   [[ -n "$id" && "$id" != ludeon.* ]] || continue
   want="$(lower "$id")"
+  pin=''
+  for i in "${!pinned_ids[@]}"; do
+    [[ "${pinned_ids[$i]}" == "$want" ]] || continue
+    pin="${pinned_items[$i]}"
+    break
+  done
+  if [[ -n "$pin" ]]; then
+    mod_refs+=(--mod "$id")
+    continue
+  fi
   found=''
   for i in "${!own_ids[@]}"; do
     [[ "${own_ids[$i]}" == "$want" ]] || continue
@@ -66,7 +88,7 @@ while read -r id; do
     break
   done
   [[ -n "$found" ]] ||
-    { echo "error: ModsConfig.xml lists '$id' and no folder under $MODS_DIR declares it" >&2; exit 1; }
+    { echo "error: ModsConfig.xml lists '$id', and no folder under $MODS_DIR declares it and no workshop pin names it" >&2; exit 1; }
   mod_refs+=(--mod "path:$found")
 done < <(sed -n '/<activeMods>/,/<\/activeMods>/s|.*<li>\(.*\)</li>.*|\1|p' "$MODS_CONFIG")
 
@@ -85,7 +107,11 @@ if [[ -n "$RUN_TIMEOUT" ]]; then
   game_args+=("-pickle-run-timeout=$RUN_TIMEOUT")
 fi
 
-args=(run --ci --game rimworld --image "$IMAGE" --mode headless --plain)
+args=(run)
+if [[ -n "$GAMECRATE_PROFILE" ]]; then
+  args+=("$GAMECRATE_PROFILE")
+fi
+args+=(--ci --game rimworld --image "$IMAGE" --mode headless --plain)
 if [[ -n "$RUN_TIMEOUT" ]]; then
   args+=(--timeout "$((RUN_TIMEOUT * 60 + 120))")
 fi
@@ -120,6 +146,14 @@ games:
       updates:
         check: false
 YML
+
+if (( ${#pinned_ids[@]} > 0 )); then
+  echo "    library:" >> "$XDG_CONFIG_HOME/gamecrate/config.yml"
+  for i in "${!pinned_ids[@]}"; do
+    printf '      %s:\n        workshop: %s\n' "${pinned_ids[$i]}" "${pinned_items[$i]}" \
+      >> "$XDG_CONFIG_HOME/gamecrate/config.yml"
+  done
+fi
 
 printf 'gamecrate'; printf ' %q' "${args[@]}"; printf '\n'
 

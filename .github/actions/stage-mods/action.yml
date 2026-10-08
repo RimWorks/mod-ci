@@ -26,6 +26,9 @@ inputs:
   staged-mods:
     description: "Comma separated owner/repo:AssetPrefix:packageId to stage from their latest release"
     default: ''
+  workshop-mods:
+    description: "Newline list of packageId:publishedFileId, written to workshop-pins.txt for the launcher to resolve"
+    default: ''
   pickle-version:
     description: "self, empty to float to the latest release, a release tag, or none to leave Pickle out"
     default: ''
@@ -41,6 +44,7 @@ runs:
         MOD_PACKAGE_ID: ${{ inputs.mod-package-id }}
         GAME_VERSION: ${{ inputs.game-version }}
         STAGED_MODS: ${{ inputs.staged-mods }}
+        WORKSHOP_MODS: ${{ inputs.workshop-mods }}
         PICKLE_VERSION: ${{ inputs.pickle-version }}
         # anonymous github api is 60 calls an hour, shared across everything on the runner
         GITHUB_TOKEN: ${{ github.token }}

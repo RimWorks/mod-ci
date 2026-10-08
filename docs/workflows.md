@@ -298,6 +298,8 @@ the copies drifted apart. That is the failure the release plumbing here exists t
 | `backends` | string | `'["harmony"]'` | JSON array of `harmony`, `concord` or `both`. One matrix leg per entry |
 | `mod-sets` | string | `''` | JSON array of `{name, backend, extraMods}`. Replaces `backends`, and its legs report instead of gating |
 | `staged-mods` | string | `''` | Comma separated `owner/repo:AssetPrefix:packageId` of extra mods to download |
+| `workshop-mods` | string | `''` | Newline list of `packageId:publishedFileId`. gamecrate downloads each one from the Steam Workshop during the run |
+| `gamecrate-profile` | string | `''` | Profile name for `gamecrate run`. A committed `.gamecrate.yml` then lists the mods to load |
 | `pickle-version` | string | `''` | Pickle release to stage. Empty takes the latest, or pass a tag, `self` or `none` |
 | `suite-filter` | string | `''` | Value for `-pickle-run`. Empty falls back to `mod-name`. A leg then runs its own features and nobody else's |
 | `unfiltered` | boolean | `false` | Run every discovered feature with no filter. Only Pickle's own repo wants this |
