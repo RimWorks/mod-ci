@@ -191,6 +191,7 @@ test('turns the update check off, since it wants a steam account no runner has',
   const written = await readFile(join(root, 'gamecrate-config', 'gamecrate', 'config.yml'), 'utf8');
 
   assert.match(written, /check: false/);
+  assert.match(written, /cpus: \d+/);
 });
 
 test('passes --ci, so a committed .gamecrate.yml cannot swap the mod set', async () => {
