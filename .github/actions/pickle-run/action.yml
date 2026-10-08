@@ -39,8 +39,8 @@ inputs:
     description: linux. windows is refused while gamecrate cannot trust a proton exit code
     default: linux
   gamecrate-version:
-    description: Version of @gamecrate/cli to install. 3.3.0 is the first with --ci
-    default: '3.3.0'
+    description: Version range of @gamecrate/cli to install. 3.3 is the first with --ci
+    default: '^3.4'
   gamecrate-plugin-version:
     description: Version of @gamecrate/rimworld to install. Versioned apart from the cli
     default: '2.2.0'
