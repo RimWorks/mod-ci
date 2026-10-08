@@ -267,8 +267,6 @@ the same repo usually needs them.
 
 Plays a Pickle suite against a live game. The job builds the mod and stages it alongside the mods
 it depends on. It then runs the features in a container and reads pass or fail out of the report.
-Pickle, Quickstarts and RimworldCosmere each kept a near-identical copy of that script set, and
-the copies drifted apart. That is the failure the release plumbing here exists to stop.
 
 ```yaml
   suite:

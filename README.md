@@ -3,10 +3,7 @@
 Shared release plumbing for the RimWorks RimWorld mods: publish stamps, Steam Workshop bumps,
 release-zip checks, Discord announcements, and the CI workflows that run them.
 
-RimLogging, Pickle, Quickstarts and RimObs each kept near-identical copies of these scripts. The
-copies drifted. A fix merged into one copy and the other three went stale.
-
-Used by [RimLogging][rl], [Pickle][pk], [Quickstarts][qs] and [RimObs][ro].
+Used by [RimLogging][rl], [Pickle][pk] and [Quickstarts][qs].
 
 ## Install
 
@@ -69,4 +66,3 @@ Tests use the built-in Node test runner, so there is nothing else to install.
 [rl]: https://github.com/RimWorks/rimworld-logging-framework
 [pk]: https://github.com/RimWorks/Rimworld-Pickle
 [qs]: https://github.com/RimWorks/Rimworld-Quickstarts
-[ro]: https://github.com/RimWorks/rimworld-observability-collector

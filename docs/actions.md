@@ -7,8 +7,8 @@ Actions a job calls with `uses:`, for the steps that are the same in every repo.
 Builds a mod and runs the tests. It reports coverage to SonarCloud and fails on analyzer findings.
 
 It is an action rather than a reusable workflow because Pickle stages game assemblies from a
-container and RimObs builds a dashboard, both in the same job as the build. You cannot inject steps
-into a called workflow, but a composite action drops into the caller's job.
+container in the same job as the build. You cannot inject steps into a called workflow, but a
+composite action drops into the caller's job.
 
 The caller does its own checkout, because Sonar needs the full history to scope new code:
 
