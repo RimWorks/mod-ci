@@ -164,10 +164,11 @@ function judgeNoReport({ dir, status, containerLog, playerLog, stampMs, fresh })
   }
 
   const lines = [
-    '**This run never reported.**',
+    `**This run never reported, and the container exited ${status}.**`,
     '',
-    `No summary.json under \`${dir}\` newer than the stamp, and nothing in Player.log or the`,
-    `container log says the X server died. Container exit ${status}.`,
+    `No summary.json under \`${dir}\` newer than the stamp. Neither Player.log nor the container`,
+    'log matched an X server death, so this is not the flake a retry fixes. Read the container',
+    'lines below: they carry the real reason, which is usually not about X at all.',
   ];
   const notices = [];
 
