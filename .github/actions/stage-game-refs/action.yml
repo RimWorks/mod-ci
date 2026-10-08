@@ -42,13 +42,17 @@ runs:
 
         managed="$DEST/RimWorldLinux_Data/Managed"
         mkdir -p "$managed"
-        docker cp "$cid:/game/RimWorldLinux_Data/Managed/." "$managed/"
-        docker cp "$cid:/game/Version.txt" "$managed/Version.txt"
-
-        [[ -f "$managed/Assembly-CSharp.dll" ]] || {
-          echo "::error::$GAME_IMAGE has no Assembly-CSharp.dll under RimWorldLinux_Data/Managed"
+        src="$(docker run --rm --entrypoint sh "$GAME_IMAGE" -c \
+          'find /game -name Assembly-CSharp.dll 2>/dev/null |
+             awk "{ print gsub(/\//, \"/\"), \$0 }" | sort -n | head -1 | cut -d" " -f2-')"
+        [[ -n "$src" ]] || {
+          echo "::error::$GAME_IMAGE has no Assembly-CSharp.dll anywhere under /game"
           exit 1
         }
+        echo "assemblies live at $(dirname "$src")"
+        docker run --rm --entrypoint sh "$GAME_IMAGE" \
+          -c "cd '$(dirname "$src")' && tar -c ./*.dll" | tar -x -C "$managed"
+        docker cp "$cid:/game/Version.txt" "$managed/Version.txt"
         echo "managed-dir=$managed" >> "$GITHUB_OUTPUT"
 
         # the image knows its own version, so a caller cannot map the wrong one
