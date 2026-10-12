@@ -63,7 +63,8 @@ game=$!
 
 ( until [[ -f "$REPORT_DIR/Player.log" ]]; do sleep 2; done
   exec tail -n +1 -f "$REPORT_DIR/Player.log" \
-    > >(grep --line-buffered -oE 'pickle: .*') ) &
+    > >(sed -u -e 's/<color=[^>]*>//g' -e 's|</color>||g' \
+               -e '/\[Pickle\]/!d' -e 's/^/[pickle] /') ) &
 follow=$!
 
 # the verdict step reads this code, so nothing may swallow it

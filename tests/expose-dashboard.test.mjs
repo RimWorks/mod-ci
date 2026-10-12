@@ -18,11 +18,16 @@ async function tunnel(env) {
   await writeFile(join(bin, 'curl'), [
     '#!/usr/bin/env bash',
     'dest=""; while (( $# )); do [[ "$1" == "-o" ]] && dest="$2"; shift; done',
-    '[[ -z "$dest" || "$dest" == /dev/null ]] && exit 0',
+    '[[ -z "$dest" || "$dest" == /dev/null ]] && exit "${PROBE_EXIT:-0}"',
     'printf "#!/usr/bin/env bash\\necho https://stub-tunnel.trycloudflare.com\\nsleep 30\\n" > "$dest"',
   ].join('\n'));
   await writeFile(join(bin, 'sha256sum'), '#!/usr/bin/env bash\ncat > /dev/null\nexit 0\n');
-  for (const stub of ['curl', 'sha256sum']) await chmod(join(bin, stub), 0o755);
+  await writeFile(join(bin, 'sleep'), [
+    '#!/usr/bin/env bash',
+    '[[ "$1" == 45 ]] && exec /bin/sleep 45',
+    'exit 0',
+  ].join('\n'));
+  for (const stub of ['curl', 'sha256sum', 'sleep']) await chmod(join(bin, stub), 0o755);
 
   const summary = join(root, 'summary.md');
   await writeFile(summary, '');
@@ -46,4 +51,14 @@ test('labels the URL with the set name so a matrix has one findable link per leg
 test('takes the port from the environment, so two legs never share one tunnel', async () => {
   const { root } = await tunnel({ DASHBOARD_PORT: '27753' });
   await readFile(join(root, 'cloudflared-27753.log'), 'utf8');
+});
+
+test('warns when nothing ever answered on the port, since the tunnel prints a URL regardless', async () => {
+  const { stdout } = await tunnel({ SET_NAME: 'harmony', DASHBOARD_PORT: '27754', PROBE_EXIT: '7' });
+  assert.match(stdout, /::warning title=Pickle dashboard \(harmony\)::nothing answered on port 27754/);
+});
+
+test('stays quiet about the port when the game answers it', async () => {
+  const { stdout } = await tunnel({ SET_NAME: 'harmony', DASHBOARD_PORT: '27755' });
+  assert.ok(!stdout.includes('nothing answered on port'));
 });

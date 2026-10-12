@@ -134,11 +134,13 @@ if [[ "$LIVE_DASHBOARD" == "true" ]]; then
   game_args+=("-pickle-http-port=$DASHBOARD_PORT")
 fi
 
-args+=(-- "${game_args[@]}" -pickle-report-dir=/out -logfile /out/Player.log)
+args+=(-- "${game_args[@]}" -pickle-report-dir=/out)
 
 export XDG_CONFIG_HOME="$TMP/gamecrate-config"
+GC_DATA="$TMP/gamecrate-data"
 mkdir -p "$XDG_CONFIG_HOME/gamecrate"
 cat > "$XDG_CONFIG_HOME/gamecrate/config.yml" <<YML
+dataRoot: $GC_DATA
 defaults:
   settings:
     cpus: $(nproc)
@@ -164,20 +166,33 @@ game=$!
 echo "game container started, waiting for its log ..."
 
 # process substitution, not a pipe: $! after `tail | sed` is sed's, and the follower survives the kill
-tail -n +1 -f "$TMP/container.log" > >(sed 's/^/[container] /') &
+tail -n +1 -f "$TMP/container.log" > >(sed -u 's/^/[container] /') &
 container_follow=$!
 
+game_log() {
+  local f
+  for f in "$GC_DATA"/rimworld/*/logs/current/Player.log \
+           "$GC_DATA"/rimworld/*/*/logs/current/Player.log; do
+    [[ -f "$f" ]] || continue
+    printf '%s' "$f"
+    return 0
+  done
+  return 1
+}
+
 ( sleep 45
-  if [[ ! -f "$REPORT_DIR/Player.log" ]]; then
-    echo "no Player.log after 45s; dumping state"
+  if ! game_log > /dev/null; then
+    echo "no Player.log under $GC_DATA after 45s; dumping state"
     docker ps -a --filter name=gamecrate-rimworld --format '{{.Status}} {{.Image}}'
+    find "$GC_DATA" -maxdepth 6 2>/dev/null | head -50 || true
     ls -la "$REPORT_DIR" || true
   fi ) &
 watchdog=$!
 
-( until [[ -f "$REPORT_DIR/Player.log" ]]; do sleep 1; done
-  exec tail -n +1 -f "$REPORT_DIR/Player.log" \
-    > >(grep --line-buffered -oE 'pickle: .*') ) &
+( until log="$(game_log)"; do sleep 1; done
+  exec tail -n +1 -f "$log" \
+    > >(sed -u -e 's/<color=[^>]*>//g' -e 's|</color>||g' \
+               -e '/\[Pickle\]/!d' -e 's/^/[pickle] /') ) &
 follow=$!
 
 helpers=("$follow" "$container_follow" "$watchdog")
@@ -191,4 +206,11 @@ status=0
 wait "$game" || status=$?
 sleep 1
 kill "${helpers[@]}" 2>/dev/null || true
+
+if saved="$(game_log)"; then
+  cp "$saved" "$REPORT_DIR/Player.log" || true
+else
+  echo "::warning title=Pickle log::no Player.log under $GC_DATA, so the report artifact has none"
+fi
+
 exit "$status"

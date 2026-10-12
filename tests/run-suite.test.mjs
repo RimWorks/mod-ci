@@ -35,7 +35,15 @@ async function suite(platform, env = {}, dockerExit = '0', modsConfig = null, pi
     await writeFile(join(bin, name), [
       '#!/usr/bin/env bash',
       'printf "%s\\n" "$@" >> "$DOCKER_ARGV"',
-      '[[ "$1" == run ]] && exit "$DOCKER_EXIT"',
+      'if [[ "$1" == run ]]; then',
+      '  if [[ -n "${GAME_LOG_LINES:-}" ]]; then',
+      '    d="$RUNNER_TEMP/gamecrate-data/rimworld/modless/logs/current"',
+      '    mkdir -p "$d"',
+      '    printf "%s\\n" "$GAME_LOG_LINES" > "$d/Player.log"',
+      '    sleep 4',
+      '  fi',
+      '  exit "$DOCKER_EXIT"',
+      'fi',
       'exit 0',
     ].join('\n'), { mode: 0o755 });
   }
@@ -63,6 +71,7 @@ async function suite(platform, env = {}, dockerExit = '0', modsConfig = null, pi
     root,
     code: result.code ?? 0,
     stderr: await readFile(err, 'utf8'),
+    stdout: await readFile(join(root, 'stdout.log'), 'utf8'),
     argv: (await readFile(argv, 'utf8')).split('\n'),
   };
 }
@@ -280,4 +289,37 @@ test('passes a profile as the run positional, so a committed .gamecrate.yml can 
 test('drops --ci beside a named profile, which gamecrate refuses as a contradiction', async () => {
   const { argv } = await suite('linux', { UNFILTERED: 'true', GAMECRATE_PROFILE: 'pickle' });
   assert.ok(!argv.includes('--ci'));
+});
+
+test('passes no -logfile, which gamecrate would override anyway', async () => {
+  const { argv } = await suite('linux', { UNFILTERED: 'true' });
+  assert.ok(!argv.includes('-logfile'));
+  assert.ok(!argv.some((arg) => arg.endsWith('/out/Player.log')));
+});
+
+test('pins the gamecrate data root, so the log it writes has one known path', async () => {
+  const { root } = await suite('linux', { UNFILTERED: 'true' });
+  const config = await readFile(join(root, 'gamecrate-config', 'gamecrate', 'config.yml'), 'utf8');
+  assert.match(config, new RegExp(`^dataRoot: ${root}/gamecrate-data$`, 'm'));
+});
+
+test('streams the game log live, stripping the unity colour tags around each line', async () => {
+  const { stdout } = await suite('linux', { UNFILTERED: 'true',
+    GAME_LOG_LINES: '<color=#A5C2A5>[2026-10-12 01:02:03.004] [INFO] [Pickle] [Run.cs:21] </color>scenario 1 of 7' });
+
+  assert.match(stdout, /^\[pickle\] \[2026-10-12 01:02:03\.004\] \[INFO\] \[Pickle\] \[Run\.cs:21\] scenario 1 of 7$/m);
+  assert.ok(!stdout.includes('<color='), 'a colour tag reaching the log makes every line unreadable');
+});
+
+test('copies the game log into the report dir, so the artifact carries it', async () => {
+  const { root } = await suite('linux', { UNFILTERED: 'true',
+    GAME_LOG_LINES: '<color=#A5C2A5>[INFO] [Pickle] [Run.cs:21] </color>done' });
+
+  const saved = await readFile(join(root, 'reports', 'Player.log'), 'utf8');
+  assert.match(saved, /\[Pickle\]/);
+});
+
+test('warns when the game wrote no log at all, rather than uploading a report with none', async () => {
+  const { stdout } = await suite('linux', { UNFILTERED: 'true' });
+  assert.match(stdout, /::warning title=Pickle log::no Player\.log under/);
 });

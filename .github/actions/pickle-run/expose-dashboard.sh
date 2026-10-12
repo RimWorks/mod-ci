@@ -24,12 +24,19 @@ if ! printf '%s  %s\n' "$CLOUDFLARED_SHA256" "$CLOUDFLARED" | sha256sum --check 
 fi
 chmod +x "$CLOUDFLARED"
 
+ready=false
 for _ in $(seq 1 90); do
   if curl -sS -o /dev/null "http://localhost:${PORT}/" 2>/dev/null; then
+    ready=true
     break
   fi
   sleep 2
 done
+
+if [[ "$ready" != true ]]; then
+  echo "::warning title=Pickle dashboard (${LABEL})::nothing answered on port ${PORT} after 180s," \
+    "so the tunnel URL below serves 502 until the game publishes it"
+fi
 
 "$CLOUDFLARED" tunnel --url "http://localhost:${PORT}" --no-autoupdate > "$LOG" 2>&1 &
 
