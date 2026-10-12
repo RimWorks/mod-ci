@@ -44,6 +44,10 @@ on:
         description: JSON array of harmony, concord or both. One leg per entry.
         type: string
         default: '["harmony"]'
+      set-suffix:
+        description: "Appended to every name backends derives, so two callers in one run upload under different artifacts."
+        type: string
+        default: ''
       mod-sets:
         description: "JSON array of {name, backend, extraMods}. Replaces backends, and its legs report instead of gating."
         type: string
@@ -149,6 +153,7 @@ jobs:
         id: read
         env:
           BACKENDS: ${{ inputs.backends }}
+          SET_SUFFIX: ${{ inputs.set-suffix }}
           MOD_SETS: ${{ inputs.mod-sets }}
           STAGED_MODS: ${{ inputs.staged-mods }}
           WORKSHOP_MODS: ${{ inputs.workshop-mods }}
@@ -160,7 +165,7 @@ jobs:
           if [[ -n "$MOD_SETS" ]]; then
             legs="$(jq -c '.' <<< "$MOD_SETS")" || die "mod-sets is not valid json"
           else
-            legs="$(jq -c 'map({name: ., backend: .})' <<< "$BACKENDS")" ||
+            legs="$(jq -c --arg sfx "$SET_SUFFIX" 'map({name: (. + $sfx), backend: .})' <<< "$BACKENDS")" ||
               die "backends is not a valid json array"
           fi
 
