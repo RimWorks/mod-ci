@@ -54,7 +54,7 @@ export default releaseConfig({
 | --- | --- | --- | --- |
 | `solution` | string | required | Solution or project the release builds. |
 | `versions` | string[] | required | Game versions to build. Read them from `loadFolders.xml` with `declaredVersions`. |
-| `mods` | object[] | required | One entry per mod in the repo. Each takes `name`, `workshopId`, and an optional `previewfile`. |
+| `mods` | object[] | required | One entry per mod in the repo. Each takes `name`, `workshopId`, and an optional `previewfile` and `tags`. |
 | `branches` | array | `['main']` | Passed to semantic-release. |
 | `extraRules` | object[] | `[]` | Extra `releaseRules`, added before the shared set. |
 | `beforeBuild` | string[] | `[]` | Commands to run before the first build, such as a frontend bundle. |
@@ -65,6 +65,11 @@ export default releaseConfig({
 | `assets` | object[] | `[]` | Files to attach to the GitHub release. |
 
 An empty `workshopId` drops the Steam plugin, so a mod without a Workshop item still releases.
+
+Workshop tags default to `Mod` plus every declared version, so a new game version needs no code
+change. A mod entry can set its own `tags` to override that. Tags replace the item's whole tag
+list, and setting them needs `STEAM_PASSWORD` or `STEAM_REFRESH_TOKEN` in the release
+environment.
 
 The commit analyzer gets a `breakingHeaderPattern`. The angular preset ignores the `!` marker,
 so `fix!: drop a thing` reads as a plain patch without it. With it, `!` cuts a major.

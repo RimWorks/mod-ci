@@ -66,6 +66,27 @@ test('a preview file is only written when one is given', () => {
   assert.equal(withPreview.mods[0].previewfile, '/p.png');
 });
 
+test('workshop tags come from the declared versions, so a new one needs no code change', () => {
+  clearRefsEnv();
+  const cfg = releaseConfig({ ...base, versions: ['1.5', '1.6', '1.7'] });
+  const [, opts] = cfg.plugins.find((p) => Array.isArray(p) && p[0] === 'semantic-release-steam');
+
+  assert.deepEqual(opts.mods[0].tags, ['Mod', '1.5', '1.6', '1.7']);
+});
+
+test('a mod can override the derived tags', () => {
+  clearRefsEnv();
+  const cfg = releaseConfig({ ...base, mods: [{ name: 'X', workshopId: '1', tags: ['Mod', '1.6'] }] });
+  const [, opts] = cfg.plugins.find((p) => Array.isArray(p) && p[0] === 'semantic-release-steam');
+
+  assert.deepEqual(opts.mods[0].tags, ['Mod', '1.6']);
+});
+
+test('no tags given to steamMod leaves the key off, so the item keeps its own', () => {
+  const [[, opts]] = steamMod({ name: 'Pickle', workshopId: '123' });
+  assert.equal('tags' in opts.mods[0], false);
+});
+
 test('the nuget push skips itself without a key, so a dry run does not fail', () => {
   const cmd = nugetPush('artifacts/Foo.*.nupkg');
   assert.match(cmd, /if \[ -n "\$NUGET_API_KEY" \]/);
