@@ -37,9 +37,9 @@ async function suite(platform, env = {}, dockerExit = '0', modsConfig = null, pi
       'printf "%s\\n" "$@" >> "$DOCKER_ARGV"',
       'if [[ "$1" == run ]]; then',
       '  if [[ -n "${GAME_LOG_LINES:-}" ]]; then',
-      '    d="$RUNNER_TEMP/gamecrate-data/rimworld/modless/logs/current"',
-      '    mkdir -p "$d"',
-      '    printf "%s\\n" "$GAME_LOG_LINES" > "$d/Player.log"',
+      '    f="$RUNNER_TEMP/gamecrate-data/${GAME_LOG_PATH:-rimworld/modless/logs/current/Player.log}"',
+      '    mkdir -p "$(dirname "$f")"',
+      '    printf "%s\\n" "$GAME_LOG_LINES" > "$f"',
       '    sleep 4',
       '  fi',
       '  exit "$DOCKER_EXIT"',
@@ -321,5 +321,22 @@ test('copies the game log into the report dir, so the artifact carries it', asyn
 
 test('warns when the game wrote no log at all, rather than uploading a report with none', async () => {
   const { stdout } = await suite('linux', { UNFILTERED: 'true' });
-  assert.match(stdout, /::warning title=Pickle log::no Player\.log under/);
+  assert.match(stdout, /::warning title=Pickle log::no game log under/);
+});
+
+test('falls back to stdout.log, which is the only log a 1.7 image writes', async () => {
+  const { stdout, root } = await suite('linux', { UNFILTERED: 'true',
+    GAME_LOG_PATH: 'rimworld/ci/logs/current/stdout.log',
+    GAME_LOG_LINES: '<color=#A5C2A5>[INFO] [Pickle] [Run.cs:21] </color>scenario 1 of 7' });
+
+  assert.match(stdout, /^\[pickle\] \[INFO\] \[Pickle\] \[Run\.cs:21\] scenario 1 of 7$/m);
+  assert.match(await readFile(join(root, 'reports', 'Player.log'), 'utf8'), /\[Pickle\]/);
+});
+
+test('reads an instance run, whose log sits two levels deeper', async () => {
+  const { stdout } = await suite('linux', { UNFILTERED: 'true',
+    GAME_LOG_PATH: 'rimworld/pkl17/instances/run1/logs/current/Player.log',
+    GAME_LOG_LINES: '<color=#A5C2A5>[INFO] [Pickle] [Run.cs:21] </color>scenario 1 of 7' });
+
+  assert.match(stdout, /^\[pickle\] \[INFO\] \[Pickle\] \[Run\.cs:21\] scenario 1 of 7$/m);
 });

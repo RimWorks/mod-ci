@@ -172,7 +172,9 @@ container_follow=$!
 game_log() {
   local f
   for f in "$GC_DATA"/rimworld/*/logs/current/Player.log \
-           "$GC_DATA"/rimworld/*/*/logs/current/Player.log; do
+           "$GC_DATA"/rimworld/*/instances/*/logs/current/Player.log \
+           "$GC_DATA"/rimworld/*/logs/current/stdout.log \
+           "$GC_DATA"/rimworld/*/instances/*/logs/current/stdout.log; do
     [[ -f "$f" ]] || continue
     printf '%s' "$f"
     return 0
@@ -182,7 +184,7 @@ game_log() {
 
 ( sleep 45
   if ! game_log > /dev/null; then
-    echo "no Player.log under $GC_DATA after 45s; dumping state"
+    echo "no game log under $GC_DATA after 45s; dumping state"
     docker ps -a --filter name=gamecrate-rimworld --format '{{.Status}} {{.Image}}'
     find "$GC_DATA" -maxdepth 6 2>/dev/null | head -50 || true
     ls -la "$REPORT_DIR" || true
@@ -210,7 +212,7 @@ kill "${helpers[@]}" 2>/dev/null || true
 if saved="$(game_log)"; then
   cp "$saved" "$REPORT_DIR/Player.log" || true
 else
-  echo "::warning title=Pickle log::no Player.log under $GC_DATA, so the report artifact has none"
+  echo "::warning title=Pickle log::no game log under $GC_DATA, so the report artifact has none"
 fi
 
 exit "$status"
