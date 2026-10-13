@@ -73,6 +73,24 @@ test('truncates long notes on a line break and links the rest', () => {
     assert.ok(embed.description.includes('* change number 0\n'));
 });
 
+test('announces a repo that cuts no GitHub release', () => {
+    const [embed] = buildReleasePayload({ ...base, releaseUrl: '' }).embeds;
+
+    assert.equal(embed.title, 'Pickle v1.2.0');
+    assert.equal(embed.url, undefined);
+    assert.equal(embed.fields.length, 1);
+    assert.equal(embed.fields[0].name, 'Steam Workshop');
+    assert.equal(embed.description, base.notes);
+});
+
+test('ends truncated notes with an ellipsis when there is no release to link', () => {
+    const notes = Array.from({ length: 500 }, (_, i) => `* change number ${i}`).join('\n');
+    const [embed] = buildReleasePayload({ ...base, releaseUrl: '', notes }).embeds;
+
+    assert.ok(embed.description.length < 4096);
+    assert.ok(embed.description.endsWith('...'));
+});
+
 test('rejects a release with no tag', () => {
     assert.throws(() => buildReleasePayload({ ...base, tag: '' }), /tag is required/);
 });
@@ -81,4 +99,21 @@ test('throws on a failed webhook post', async () => {
     const fetchImpl = async () => ({ ok: false, status: 429, text: async () => 'rate limited' });
 
     await assert.rejects(postRelease('https://example.invalid', {}, fetchImpl), /429 rate limited/);
+});
+
+test('uploads an attached zip alongside the embed', async () => {
+    let request;
+    const fetchImpl = async (_url, init) => {
+        request = init;
+        return { ok: true, status: 200, text: async () => '' };
+    };
+
+    const payload = buildReleasePayload(base);
+    const files = [{ name: 'Pickle-1.2.0.zip', data: Buffer.from('zip bytes') }];
+    await postRelease('https://example.invalid', payload, fetchImpl, files);
+
+    assert.ok(request.body instanceof FormData);
+    assert.equal(request.headers, undefined);
+    assert.equal(request.body.get('files[0]').name, 'Pickle-1.2.0.zip');
+    assert.deepEqual(JSON.parse(request.body.get('payload_json')).attachments, [{ id: 0, filename: 'Pickle-1.2.0.zip' }]);
 });

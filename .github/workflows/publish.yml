@@ -39,6 +39,10 @@ on:
         description: Embed colour as hex without the leading hash.
         type: string
         default: '5865F2'
+      discord-attachment:
+        description: Glob matching one zip in the release artifact to attach to the announcement.
+        type: string
+        default: ''
       previous-tag:
         description: Newest tag before the release job ran, so an unmoved tag announces nothing.
         type: string
@@ -108,9 +112,29 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        if: inputs.discord-attachment != ''
+        with:
+          name: ${{ inputs.zip-artifact }}
+          pattern: ${{ inputs.zip-artifact-pattern }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/announce
+
+      - name: Find the zip to attach
+        id: attachment
+        if: inputs.discord-attachment != ''
+        env:
+          GLOB: ${{ inputs.discord-attachment }}
+        run: |
+          path="$(find "${{ runner.temp }}/announce" -name "$GLOB" | sort | head -1)"
+          echo "path=$path" >> "$GITHUB_OUTPUT"
 
       - uses: RimWorks/mod-ci/.github/actions/discord-release@v4
         with:
+          attachment: ${{ steps.attachment.outputs.path }}
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           mod-name: ${{ inputs.discord-mod-name }}
           role-ids: ${{ vars.DISCORD_ROLE_IDS }}

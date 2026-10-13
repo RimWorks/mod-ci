@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { basename } from 'node:path';
 
-import { buildReleasePayload, postRelease } from '../lib/discord-release.mjs';
+import { ATTACHMENT_LIMIT, buildReleasePayload, postRelease } from '../lib/discord-release.mjs';
 
 const notesFile = process.env.RELEASE_NOTES_FILE;
 
@@ -21,5 +22,18 @@ const payload = buildReleasePayload({
     color: process.env.EMBED_COLOR ? Number.parseInt(process.env.EMBED_COLOR, 16) : undefined,
 });
 
-await postRelease(webhookUrl, payload);
+const files = [];
+const attachment = process.env.RELEASE_ATTACHMENT;
+if (attachment && !existsSync(attachment)) {
+    console.warn(`::warning::discord-release: ${attachment} does not exist. Announcing without it.`);
+} else if (attachment) {
+    const size = statSync(attachment).size;
+    if (size > ATTACHMENT_LIMIT) {
+        console.warn(`::warning::discord-release: ${attachment} is ${size} bytes, over Discord's ${ATTACHMENT_LIMIT}. Announcing without it.`);
+    } else {
+        files.push({ name: basename(attachment), data: readFileSync(attachment) });
+    }
+}
+
+await postRelease(webhookUrl, payload, fetch, files);
 console.log(`discord-release: announced ${payload.embeds[0].title}`);
