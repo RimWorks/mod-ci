@@ -37,6 +37,10 @@ on:
         description: Artifact holding the release zips. Empty skips the Steam push.
         type: string
         default: ''
+      zip-artifact-pattern:
+        description: Glob matching several zip artifacts, for a repo that uploads one per mod.
+        type: string
+        default: ''
       release-config:
         description: semantic-release config the Steam plugin options are read from.
         type: string
@@ -103,7 +107,7 @@ jobs:
 
   steam:
     name: steam
-    if: inputs.zip-artifact != ''
+    if: inputs.zip-artifact != '' || inputs.zip-artifact-pattern != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -121,6 +125,8 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.zip-artifact }}
+          pattern: ${{ inputs.zip-artifact-pattern }}
+          merge-multiple: true
           path: ${{ runner.temp }}/zips
 
       - name: Unpack the release zips

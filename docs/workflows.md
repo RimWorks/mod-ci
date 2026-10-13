@@ -391,6 +391,7 @@ See [`splitPublish`](modules.md#splitpublish).
 | --- | --- |
 | `nupkg-artifact` | `nuget`. Empty means the repo ships no package |
 | `zip-artifact` | `steam`. Empty means the repo has no Workshop item |
+| `zip-artifact-pattern` | `steam`, for a repo that uploads one artifact per mod |
 | `discord-mod-name` | `discord`. Empty means no announcement |
 
 `nuget-timeout` defaults to 1200 seconds. The `dotnet nuget push` default of 300 is shorter than
@@ -399,6 +400,10 @@ nuget.org takes to answer a retry, which is how a published package can still fa
 The `steam` job never builds. It unpacks the zips in `zip-artifact`, which already hold the
 built and stamped mod content, and publishes from those. So it needs no game assemblies and no
 .NET SDK.
+
+Every zip has to open into a folder named after the mod, which is what `package-mod` writes and
+what the Steam plugin looks for. A repo that uploads one artifact per mod sets
+`zip-artifact-pattern` instead of `zip-artifact`, and the job merges them into one directory.
 
 ## `prose`
 
