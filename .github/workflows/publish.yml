@@ -15,24 +15,6 @@ on:
         description: Node major version to run the publish tooling with.
         type: string
         default: '22'
-      dotnet-version:
-        description: SDK versions to install for the NuGet push, newline separated.
-        type: string
-        default: |
-          8.0.x
-          10.0.x
-      nupkg-artifact:
-        description: Artifact holding the packed nupkgs. Empty skips the NuGet push.
-        type: string
-        default: ''
-      nupkg-glob:
-        description: Which downloaded files to push, relative to the download directory.
-        type: string
-        default: '*.nupkg'
-      nuget-timeout:
-        description: Seconds a single push may take. The dotnet default of 300 is too tight.
-        type: number
-        default: 1200
       zip-artifact:
         description: Artifact holding the release zips. Empty skips the Steam push.
         type: string
@@ -70,41 +52,6 @@ permissions:
   contents: read
 
 jobs:
-  nuget:
-    name: nuget
-    if: inputs.nupkg-artifact != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: ${{ inputs.dotnet-version }}
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: ${{ inputs.nupkg-artifact }}
-          path: nupkgs
-
-      - name: NuGet login (OIDC trusted publishing)
-        id: nuget-login
-        uses: NuGet/login@v1
-        with:
-          user: ${{ secrets.NUGET_USER }}
-
-      - name: Push
-        env:
-          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
-          GLOB: ${{ inputs.nupkg-glob }}
-          TIMEOUT: ${{ inputs.nuget-timeout }}
-        run: |
-          dotnet nuget push "nupkgs/$GLOB" \
-            --api-key "$NUGET_API_KEY" \
-            --source https://api.nuget.org/v3/index.json \
-            --timeout "$TIMEOUT" \
-            --skip-duplicate
-
   steam:
     name: steam
     if: inputs.zip-artifact != '' || inputs.zip-artifact-pattern != ''
@@ -154,7 +101,7 @@ jobs:
 
   discord:
     name: discord
-    needs: [nuget, steam]
+    needs: [steam]
     if: always() && !failure() && !cancelled() && inputs.discord-mod-name != ''
     runs-on: ubuntu-latest
     permissions:

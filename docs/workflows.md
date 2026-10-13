@@ -362,9 +362,9 @@ sharing one, fails before the first container starts.
 
 ## `publish`
 
-Pushes an already tagged release to NuGet and the Steam Workshop, then announces it in Discord.
-Each job runs on its own, so a NuGet timeout is one job to re-run instead of a dead
-semantic-release run that will not release the same commit twice.
+Pushes an already tagged release to the Steam Workshop, then announces it in Discord. Each job
+runs on its own, so a Workshop timeout is one job to re-run instead of a dead semantic-release
+run that will not release the same commit twice.
 
 ```yaml
   publish:
@@ -373,11 +373,9 @@ semantic-release run that will not release the same commit twice.
     uses: RimWorks/mod-ci/.github/workflows/publish.yml@v4
     permissions:
       contents: read
-      id-token: write
     secrets: inherit
     with:
       version: ${{ needs.release.outputs.version }}
-      nupkg-artifact: release-nupkgs
       zip-artifact: release-zips
       discord-mod-name: RimLogging
       discord-workshop-id: '3733484696'
@@ -389,12 +387,44 @@ See [`splitPublish`](modules.md#splitpublish).
 
 | Input | Job it turns on |
 | --- | --- |
-| `nupkg-artifact` | `nuget`. Empty means the repo ships no package |
 | `zip-artifact` | `steam`. Empty means the repo has no Workshop item |
 | `zip-artifact-pattern` | `steam`, for a repo that uploads one artifact per mod |
 | `discord-mod-name` | `discord`. Empty means no announcement |
 
-`nuget-timeout` defaults to 1200 seconds. The `dotnet nuget push` default of 300 is shorter than
+**A NuGet push cannot run from here.** NuGet trusted publishing matches the OIDC
+`job_workflow_ref` claim against the package repository's own path, and that claim names the
+innermost reusable workflow, so a push called through this one fails with
+`Token exchange failed (HTTP 401)`. Keep the push as a job in the repo that owns the package,
+between `release` and `publish`, so a failed push still blocks the Discord announcement:
+
+```yaml
+  nuget:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-nupkgs
+          path: nupkgs
+      - uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+      - run: |
+          dotnet nuget push "nupkgs/*.nupkg" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --timeout 1200 --skip-duplicate
+```
+
+`--timeout 1200` matters. The `dotnet nuget push` default of 300 seconds is shorter than
 nuget.org takes to answer a retry, which is how a published package can still fail the run.
 
 The `steam` job never builds. It unpacks the zips in `zip-artifact`, which already hold the
