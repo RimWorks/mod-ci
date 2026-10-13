@@ -140,8 +140,9 @@ fi
 args+=(-- "${game_args[@]}" -pickle-report-dir=/out)
 
 export XDG_CONFIG_HOME="$TMP/gamecrate-config"
+export XDG_CACHE_HOME="$TMP/gamecrate-cache"
 GC_DATA="$TMP/gamecrate-data"
-mkdir -p "$XDG_CONFIG_HOME/gamecrate"
+mkdir -p "$XDG_CONFIG_HOME/gamecrate" "$XDG_CACHE_HOME"
 cat > "$XDG_CONFIG_HOME/gamecrate/config.yml" <<YML
 dataRoot: $GC_DATA
 defaults:

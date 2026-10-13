@@ -34,6 +34,7 @@ async function suite(platform, env = {}, dockerExit = '0', modsConfig = null, pi
   for (const name of ['docker', 'gamecrate']) {
     await writeFile(join(bin, name), [
       '#!/usr/bin/env bash',
+      'env > "$DOCKER_ARGV.env"',
       'printf "%s\\n" "$@" >> "$DOCKER_ARGV"',
       'if [[ "$1" == run ]]; then',
       '  if [[ -n "${GAME_LOG_LINES:-}" ]]; then',
@@ -73,6 +74,7 @@ async function suite(platform, env = {}, dockerExit = '0', modsConfig = null, pi
     stderr: await readFile(err, 'utf8'),
     stdout: await readFile(join(root, 'stdout.log'), 'utf8'),
     argv: (await readFile(argv, 'utf8')).split('\n'),
+    gcEnv: await readFile(`${argv}.env`, 'utf8').catch(() => ''),
   };
 }
 
@@ -339,6 +341,14 @@ test('reads an instance run, whose log sits two levels deeper', async () => {
     GAME_LOG_LINES: '<color=#A5C2A5>[INFO] [Pickle] [Run.cs:21] </color>scenario 1 of 7' });
 
   assert.match(stdout, /^\[pickle\] \[INFO\] \[Pickle\] \[Run\.cs:21\] scenario 1 of 7$/m);
+});
+
+test('pins the cache beside the data root, so runners sharing a home do not read each other', async () => {
+  const { gcEnv, root } = await suite('linux', { UNFILTERED: 'true' });
+
+  const cache = gcEnv.match(/^XDG_CACHE_HOME=(.*)$/m)?.[1];
+  assert.equal(cache, join(root, 'gamecrate-cache'),
+    'a cache under a shared $HOME outlives the data root it describes, and every record dir in it is absolute');
 });
 
 test('names an instance per leg, so two legs on one host do not fight over the container name', async () => {
