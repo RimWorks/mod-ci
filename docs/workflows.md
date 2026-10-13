@@ -21,6 +21,7 @@ these has to grant the scopes at each hop.
 | `pickle-suite` | `contents: read`, `packages: write`, `actions: read` |
 | `package-deps` | `contents: read`, `packages: read` |
 | `prose` | `contents: read` |
+| `publish` | `contents: read`, `id-token: write` |
 | `sonar` | `contents: read`, `packages: read` |
 | `sonar-scan` | `contents: read` |
 | `test` | `contents: read` |
@@ -358,6 +359,46 @@ never built.
 **Give every leg its own name.** A leg is named by its `backends` entry, or by the `name` of its
 `mod-sets` object, and each one uploads an artifact under that name. An empty name, or two legs
 sharing one, fails before the first container starts.
+
+## `publish`
+
+Pushes an already tagged release to NuGet and the Steam Workshop, then announces it in Discord.
+Each job runs on its own, so a NuGet timeout is one job to re-run instead of a dead
+semantic-release run that will not release the same commit twice.
+
+```yaml
+  publish:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    uses: RimWorks/mod-ci/.github/workflows/publish.yml@v4
+    permissions:
+      contents: read
+      id-token: write
+    secrets: inherit
+    with:
+      version: ${{ needs.release.outputs.version }}
+      nupkg-artifact: release-nupkgs
+      zip-artifact: release-zips
+      discord-mod-name: RimLogging
+      discord-workshop-id: '3733484696'
+      previous-tag: ${{ needs.release.outputs.previous-tag }}
+```
+
+The release job sets `SPLIT_PUBLISH=1` so semantic-release skips the side effects these jobs own.
+See [`splitPublish`](modules.md#splitpublish).
+
+| Input | Job it turns on |
+| --- | --- |
+| `nupkg-artifact` | `nuget`. Empty means the repo ships no package |
+| `zip-artifact` | `steam`. Empty means the repo has no Workshop item |
+| `discord-mod-name` | `discord`. Empty means no announcement |
+
+`nuget-timeout` defaults to 1200 seconds. The `dotnet nuget push` default of 300 is shorter than
+nuget.org takes to answer a retry, which is how a published package can still fail the run.
+
+The `steam` job never builds. It unpacks the zips in `zip-artifact`, which already hold the
+built and stamped mod content, and publishes from those. So it needs no game assemblies and no
+.NET SDK.
 
 ## `prose`
 

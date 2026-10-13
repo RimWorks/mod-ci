@@ -97,6 +97,52 @@ export default { ...config, branches: ['next'] };
 
 Prefer that over a new option. An option that one repo uses costs every reader of this file.
 
+## `splitPublish`
+
+Takes a semantic-release plugin list and gives back one with the publish side effects removed:
+the `semantic-release-steam` plugin, and `publishCmd` on `@semantic-release/exec`. It removes
+nothing unless `SPLIT_PUBLISH=1`.
+
+`releaseConfig` already calls it. A repo with a hand-written config wraps its own list:
+
+```js
+import { splitPublish } from '@rimworks/mod-ci';
+
+export default {
+  branches: ['main'],
+  plugins: splitPublish([
+    '@semantic-release/commit-analyzer',
+    ['@semantic-release/exec', { prepareCmd: 'make build', publishCmd: 'make push' }],
+    ['semantic-release-steam', { appId: '294100', mods }],
+  ]),
+};
+```
+
+The release job sets the variable and the publish jobs do not, so one config file serves both.
+semantic-release analyzes, builds and tags; the [`publish` workflow](workflows.md#publish) does
+the pushing, one re-runnable job per target.
+
+Pass `{ enabled: true }` to decide it yourself instead of reading the environment.
+
+## `publishSteam`
+
+Runs the Steam plugin's publish against a release that is already tagged. The `publish-steam`
+CLI wraps it, so call this only from your own script.
+
+```js
+import { publishSteam } from '@rimworks/mod-ci';
+
+await publishSteam({
+  configPath: '/repo/release.config.mjs',
+  version: '3.1.3',
+  branch: 'main',
+  stageDir: '/tmp/stage',
+});
+```
+
+`stageDir` points at unpacked release zips, one directory per mod name. Leave it unset to
+publish the working tree, which then has to hold a finished build.
+
 ## `bumpWorkshop`
 
 Pushes the mod to Steam with a fresh stamp. Weekly verification runs call it.

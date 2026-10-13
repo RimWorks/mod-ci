@@ -1,0 +1,167 @@
+name: publish
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version semantic-release just tagged, without a leading v.
+        type: string
+        required: true
+      branch:
+        description: Branch the release was cut from, for the Steam branch target.
+        type: string
+        default: ${{ github.ref_name }}
+      node-version:
+        description: Node major version to run the publish tooling with.
+        type: string
+        default: '22'
+      dotnet-version:
+        description: SDK versions to install for the NuGet push, newline separated.
+        type: string
+        default: |
+          8.0.x
+          10.0.x
+      nupkg-artifact:
+        description: Artifact holding the packed nupkgs. Empty skips the NuGet push.
+        type: string
+        default: ''
+      nupkg-glob:
+        description: Which downloaded files to push, relative to the download directory.
+        type: string
+        default: '*.nupkg'
+      nuget-timeout:
+        description: Seconds a single push may take. The dotnet default of 300 is too tight.
+        type: number
+        default: 1200
+      zip-artifact:
+        description: Artifact holding the release zips. Empty skips the Steam push.
+        type: string
+        default: ''
+      release-config:
+        description: semantic-release config the Steam plugin options are read from.
+        type: string
+        default: release.config.mjs
+      discord-mod-name:
+        description: Display name to announce. Empty skips the Discord announcement.
+        type: string
+        default: ''
+      discord-workshop-id:
+        description: Workshop id, or `Label=id` pairs when one release ships several mods.
+        type: string
+        default: ''
+      discord-embed-color:
+        description: Embed colour as hex without the leading hash.
+        type: string
+        default: '5865F2'
+      previous-tag:
+        description: Newest tag before the release job ran, so an unmoved tag announces nothing.
+        type: string
+        default: ''
+      tag:
+        description: Tag the release job cut. Empty makes the Discord job read it back out of git.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  nuget:
+    name: nuget
+    if: inputs.nupkg-artifact != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.nupkg-artifact }}
+          path: nupkgs
+
+      - name: NuGet login (OIDC trusted publishing)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          GLOB: ${{ inputs.nupkg-glob }}
+          TIMEOUT: ${{ inputs.nuget-timeout }}
+        run: |
+          dotnet nuget push "nupkgs/$GLOB" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --timeout "$TIMEOUT" \
+            --skip-duplicate
+
+  steam:
+    name: steam
+    if: inputs.zip-artifact != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - name: Install publish dependencies
+        run: npm ci --ignore-scripts
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.zip-artifact }}
+          path: ${{ runner.temp }}/zips
+
+      - name: Unpack the release zips
+        id: stage
+        run: |
+          stage="${{ runner.temp }}/stage"
+          mkdir -p "$stage"
+          find "${{ runner.temp }}/zips" -name '*.zip' -exec unzip -q -o {} -d "$stage" \;
+          echo "dir=$stage" >> "$GITHUB_OUTPUT"
+          ls -1 "$stage"
+
+      - uses: RimWorks/mod-ci/.github/actions/steam-login@v4
+        with:
+          steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+
+      - name: Publish to the Workshop
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BRANCH: ${{ inputs.branch }}
+          RELEASE_STAGE_DIR: ${{ steps.stage.outputs.dir }}
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
+        run: ./node_modules/.bin/publish-steam "${{ inputs.release-config }}"
+
+  discord:
+    name: discord
+    needs: [nuget, steam]
+    if: always() && !failure() && !cancelled() && inputs.discord-mod-name != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: RimWorks/mod-ci/.github/actions/discord-release@v4
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          mod-name: ${{ inputs.discord-mod-name }}
+          role-ids: ${{ vars.DISCORD_ROLE_IDS }}
+          workshop-id: ${{ inputs.discord-workshop-id }}
+          embed-color: ${{ inputs.discord-embed-color }}
+          previous-tag: ${{ inputs.previous-tag }}
+          release-tag: ${{ inputs.tag }}

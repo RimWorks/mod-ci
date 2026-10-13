@@ -53,6 +53,29 @@ npx workshop-bump Pickle.slnx 3791648678
 The id can come from `WORKSHOP_ID` instead. It needs `STEAMCMD_PATH`, `STEAM_USERNAME` and
 `STEAM_CONFIG_VDF`, which the `steam-republish` action sets.
 
+## `publish-steam`
+
+Pushes a tagged release to the Workshop without semantic-release. It reads the
+`semantic-release-steam` options out of the repo's `release.config.mjs`, so the Workshop ids,
+tags, preview images and description stay in one place.
+
+```bash
+RELEASE_VERSION=3.1.3 RELEASE_BRANCH=main npx publish-steam
+```
+
+The config path is the one argument and defaults to `release.config.mjs`. `RELEASE_BRANCH` falls
+back to `GITHUB_REF_NAME`, and it has to match a key in the plugin's `branchTargets` or nothing
+publishes.
+
+| Variable | What it does |
+| --- | --- |
+| `RELEASE_STAGE_DIR` | Publishes from `<dir>/<mod name>` instead of the working tree, which is how the `publish` workflow ships the release zips |
+| `RELEASE_NOTES` | Changenote for the Workshop update. Falls back to the version |
+| `RELEASE_DRY_RUN` | Set to `1` to log what would be pushed |
+
+It needs the same three variables `workshop-bump` does, plus `STEAM_PASSWORD` when a mod
+configures Workshop tags. It exits `2` without a version and a branch.
+
 ## `verify-ship-list`
 
 `loadFolders.xml` decides which game version loads which folder. It is the only list of the

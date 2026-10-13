@@ -11,6 +11,7 @@
   "bin": {
     "discord-release": "./bin/discord-release.mjs",
     "package-mod": "./bin/package-mod.mjs",
+    "publish-steam": "./bin/publish-steam.mjs",
     "verify-ship-list": "./bin/verify-ship-list.mjs",
     "write-stamp": "./bin/write-stamp.mjs",
     "workshop-bump": "./bin/workshop-bump.mjs",
