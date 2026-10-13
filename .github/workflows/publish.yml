@@ -51,6 +51,19 @@ on:
         description: Tag the release job cut. Empty makes the Discord job read it back out of git.
         type: string
         default: ''
+    secrets:
+      STEAM_USERNAME:
+        description: Steam account the Workshop upload logs in as. Required unless both zip inputs are empty.
+        required: false
+      STEAM_PASSWORD:
+        description: Password for that account, for the SteamCMD login the cached vdf cannot complete.
+        required: false
+      STEAM_CONFIG_VDF_B64:
+        description: Base64 of SteamCMD's config.vdf, holding the saved login.
+        required: false
+      DISCORD_WEBHOOK_URL:
+        description: Webhook the release announcement posts to. Required unless discord-mod-name is empty.
+        required: false
 
 permissions:
   contents: read

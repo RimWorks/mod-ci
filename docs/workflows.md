@@ -385,6 +385,22 @@ run that will not release the same commit twice.
 The release job sets `SPLIT_PUBLISH=1` so semantic-release skips the side effects these jobs own.
 See [`splitPublish`](modules.md#splitpublish).
 
+**`secrets: inherit` only crosses repositories inside one organization.** A repository owned by a
+personal account inherits nothing from this workflow's organization: every secret arrives as an
+empty string, with no error, and the `steam` job fails on `STEAM_USERNAME is required`. Those
+callers pass the four secrets by name instead:
+
+```yaml
+    secrets:
+      STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+      STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
+      STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+```
+
+All four are optional, because a caller with no Workshop item or no announcement needs neither
+pair.
+
 | Input | Job it turns on |
 | --- | --- |
 | `zip-artifact` | `steam`. Empty means the repo has no Workshop item |
