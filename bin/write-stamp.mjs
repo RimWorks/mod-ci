@@ -2,7 +2,7 @@
 import { readFile } from 'node:fs/promises';
 
 import { declaredVersions } from '../lib/ship-list.mjs';
-import { refsDirFor } from '../lib/release-config.mjs';
+import { stagedRefsDir } from '../lib/release-config.mjs';
 import { writeStamp } from '../lib/write-stamp.mjs';
 
 const solution = process.argv[2];
@@ -17,4 +17,5 @@ if (!newest) {
   process.exit(1);
 }
 
-process.stdout.write(await writeStamp({ solution, refsDir: refsDirFor(newest) }));
+// no staged refs means the build used the Krafs package, which the package list already names
+process.stdout.write(await writeStamp({ solution, refsDir: stagedRefsDir(newest) }));

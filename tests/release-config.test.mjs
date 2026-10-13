@@ -8,6 +8,7 @@ import {
   nugetPush,
   refsDirFor,
   releaseConfig,
+  stagedRefsDir,
   steamMod,
 } from '../lib/release-config.mjs';
 
@@ -34,6 +35,18 @@ test('a single-version leg falls back to GameManagedDir', () => {
   process.env.GameManagedDir = '/runner/only/Managed';
   try {
     assert.equal(refsDirFor('1.6'), '/runner/only/Managed');
+  } finally {
+    clearRefsEnv();
+  }
+});
+
+test('an unstaged version has no staged dir, so the stamp can skip the game line', () => {
+  clearRefsEnv();
+  assert.equal(stagedRefsDir('1.7'), undefined);
+
+  process.env.GAME_MANAGED_1_7 = '/runner/game-1.7/Managed';
+  try {
+    assert.equal(stagedRefsDir('1.7'), '/runner/game-1.7/Managed');
   } finally {
     clearRefsEnv();
   }
