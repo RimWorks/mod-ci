@@ -48,6 +48,10 @@ on:
         description: "Appended to every name backends derives, so two callers in one run upload under different artifacts."
         type: string
         default: ''
+      runs-on:
+        description: "Runner label the suite legs take. A Vulkan game version only keeps pace on a host with a GPU."
+        type: string
+        default: ubuntu-latest
       mod-sets:
         description: "JSON array of {name, backend, extraMods}. Replaces backends, and its legs report instead of gating."
         type: string
@@ -237,7 +241,7 @@ jobs:
     name: suite (${{ matrix.set.name }})
     needs: [sets, game-image]
     if: ${{ !cancelled() && needs.sets.result == 'success' && needs.game-image.result != 'failure' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     # a composite action cannot set a job timeout, so the real one is here and the action gets a copy
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:

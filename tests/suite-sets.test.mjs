@@ -59,6 +59,16 @@ test('two legs sharing a name still die before the run starts', async () => {
   await assert.rejects(readSets({ BACKENDS: '["harmony","harmony"]' }), /repeat/);
 });
 
+test('the suite job takes its runner from the input, so a gpu host stays reachable', async () => {
+  const yaml = await readFile(WORKFLOW, 'utf8');
+  const job = yaml.slice(yaml.indexOf('\n  suite:'), yaml.indexOf('\n  merge:'));
+
+  assert.match(job, /runs-on: \$\{\{ inputs\.runs-on \}\}/,
+    'a hardcoded runner sends a vulkan game version back to software rendering');
+  assert.match(yaml, /^ {6}runs-on:\n {8}description:.+\n {8}type: string\n {8}default: ubuntu-latest$/m,
+    'the input has to default to the hosted runner, or every existing caller changes behaviour');
+});
+
 test('a suffix carrying a character an artifact name cannot hold dies', async () => {
   await assert.rejects(readSets({ BACKENDS: '["harmony"]', SET_SUFFIX: '/1.7' }), /cannot hold/);
 });
