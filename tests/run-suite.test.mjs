@@ -340,3 +340,20 @@ test('reads an instance run, whose log sits two levels deeper', async () => {
 
   assert.match(stdout, /^\[pickle\] \[INFO\] \[Pickle\] \[Run\.cs:21\] scenario 1 of 7$/m);
 });
+
+test('names an instance per leg, so two legs on one host do not fight over the container name', async () => {
+  const one = await suite('linux', { UNFILTERED: 'true', GITHUB_RUN_ID: '42', SET_NAME: 'harmony' });
+  const two = await suite('linux', { UNFILTERED: 'true', GITHUB_RUN_ID: '42', SET_NAME: 'concord-17' });
+
+  const nameOf = (argv) => argv[argv.indexOf('--instance') + 1];
+  assert.equal(nameOf(one.argv), '42-harmony');
+  assert.equal(nameOf(two.argv), '42-concord-17');
+});
+
+test('falls back to the leg index when no set is named, and scrubs what a name cannot hold', async () => {
+  const { argv } = await suite('linux', { UNFILTERED: 'true', GITHUB_RUN_ID: '42', LEG_INDEX: '1' });
+  assert.equal(argv[argv.indexOf('--instance') + 1], '42-leg1');
+
+  const dirty = await suite('linux', { UNFILTERED: 'true', GITHUB_RUN_ID: '42', SET_NAME: 'a/b c' });
+  assert.equal(dirty.argv[dirty.argv.indexOf('--instance') + 1], '42-a-b-c');
+});

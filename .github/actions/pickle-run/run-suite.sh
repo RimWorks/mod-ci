@@ -14,6 +14,7 @@ DASHBOARD_PORT="${DASHBOARD_PORT:-27750}"
 SET_NAME="${SET_NAME:-}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-}"
 GAMECRATE_PROFILE="${GAMECRATE_PROFILE:-}"
+LEG_INDEX="${LEG_INDEX:-0}"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="${RUNNER_TEMP:-/tmp}"
@@ -114,6 +115,8 @@ else
   args+=(--ci)
 fi
 args+=(--game rimworld --image "$IMAGE" --mode headless --plain)
+instance="${GITHUB_RUN_ID:-local}-${SET_NAME:-leg$LEG_INDEX}"
+args+=(--instance "${instance//[^A-Za-z0-9._-]/-}")
 if [[ -n "$RUN_TIMEOUT" ]]; then
   args+=(--timeout "$((RUN_TIMEOUT * 60 + 120))")
 fi
