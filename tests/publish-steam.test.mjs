@@ -66,7 +66,11 @@ test('the env flag turns splitPublish on', () => {
 
 test('publishSteam hands the plugin its own options and a tagged-release context', async () => {
   const path = await configFile(
-    `export default { plugins: [['semantic-release-steam', { appId: '294100', mods: [{ name: 'RimLogging' }] }]] };`,
+    `export default { plugins: [['semantic-release-steam', {
+       appId: '294100',
+       branchTargets: { main: 'stable' },
+       mods: [{ name: 'RimLogging', workshopIds: { stable: '3733484696' } }],
+     }]] };`,
   );
 
   const calls = [];
@@ -89,7 +93,11 @@ test('publishSteam hands the plugin its own options and a tagged-release context
 test('publishSteam reads the config with SPLIT_PUBLISH cleared', async () => {
   const path = await configFile(
     `const split = process.env.SPLIT_PUBLISH === '1';
-     export default { plugins: split ? [] : [['semantic-release-steam', { mods: [{ name: 'Mod' }] }]] };`,
+     const steam = ['semantic-release-steam', {
+       branchTargets: { main: 'stable' },
+       mods: [{ name: 'Mod', workshopIds: { stable: '1' } }],
+     }];
+     export default { plugins: split ? [] : [steam] };`,
   );
 
   process.env.SPLIT_PUBLISH = '1';
@@ -157,6 +165,26 @@ test('publishSteam leaves staging to the plugin when no stage dir is given', asy
   });
 
   assert.equal('stageModContent' in context, false);
+});
+
+test('publishSteam reports only the mods the branch target can reach', async () => {
+  const path = await configFile(
+    `export default { plugins: [['semantic-release-steam', {
+       branchTargets: { main: 'stable', beta: 'beta' },
+       mods: [
+         { name: 'CosmereCore', workshopIds: { stable: '1', beta: '2' } },
+         { name: 'CosmereRoshar', workshopIds: { beta: '3' } },
+       ],
+     }]] };`,
+  );
+  const common = { configPath: path, version: '9.9.9', publish: () => {} };
+
+  assert.deepEqual(await publishSteam({ ...common, branch: 'main' }), ['CosmereCore']);
+  assert.deepEqual(await publishSteam({ ...common, branch: 'beta' }), [
+    'CosmereCore',
+    'CosmereRoshar',
+  ]);
+  assert.deepEqual(await publishSteam({ ...common, branch: 'alpha' }), []);
 });
 
 test('publishSteam refuses a config with no steam plugin', async () => {
