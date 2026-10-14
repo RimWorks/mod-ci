@@ -101,10 +101,10 @@ test('throws on a failed webhook post', async () => {
     await assert.rejects(postRelease('https://example.invalid', {}, fetchImpl), /429 rate limited/);
 });
 
-test('uploads an attached zip alongside the embed', async () => {
-    let request;
+test('posts the zip after the embed, so discord renders the embed on top', async () => {
+    const requests = [];
     const fetchImpl = async (_url, init) => {
-        request = init;
+        requests.push(init);
         return { ok: true, status: 200, text: async () => '' };
     };
 
@@ -112,8 +112,30 @@ test('uploads an attached zip alongside the embed', async () => {
     const files = [{ name: 'Pickle-1.2.0.zip', data: Buffer.from('zip bytes') }];
     await postRelease('https://example.invalid', payload, fetchImpl, files);
 
-    assert.ok(request.body instanceof FormData);
-    assert.equal(request.headers, undefined);
-    assert.equal(request.body.get('files[0]').name, 'Pickle-1.2.0.zip');
-    assert.deepEqual(JSON.parse(request.body.get('payload_json')).attachments, [{ id: 0, filename: 'Pickle-1.2.0.zip' }]);
+    assert.equal(requests.length, 2);
+
+    const [embed, upload] = requests;
+    assert.equal(embed.headers['content-type'], 'application/json');
+    assert.equal(JSON.parse(embed.body).embeds[0].title, 'Pickle v1.2.0');
+
+    assert.ok(upload.body instanceof FormData);
+    assert.equal(upload.headers, undefined);
+    assert.equal(upload.body.get('files[0]').name, 'Pickle-1.2.0.zip');
+    assert.deepEqual(JSON.parse(upload.body.get('payload_json')).attachments, [{ id: 0, filename: 'Pickle-1.2.0.zip' }]);
+});
+
+test('does not ping the role twice when a zip follows', async () => {
+    const requests = [];
+    const fetchImpl = async (_url, init) => {
+        requests.push(init);
+        return { ok: true, status: 200, text: async () => '' };
+    };
+
+    await postRelease('https://example.invalid', buildReleasePayload(base), fetchImpl, [
+        { name: 'Pickle-1.2.0.zip', data: Buffer.from('zip bytes') },
+    ]);
+
+    const upload = JSON.parse(requests[1].body.get('payload_json'));
+    assert.equal(upload.content, undefined);
+    assert.equal(upload.embeds, undefined);
 });
