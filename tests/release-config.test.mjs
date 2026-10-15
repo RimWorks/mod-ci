@@ -72,10 +72,10 @@ test('no workshop id yields no steam plugin at all', () => {
 });
 
 test('a preview file is only written when one is given', () => {
-  const [[, opts]] = steamMod({ name: 'Pickle', workshopId: '123' });
+  const [[, opts]] = steamMod({ name: 'Pickle', workshopId: '123', title: 'Pickle' });
   assert.equal('previewfile' in opts.mods[0], false);
 
-  const [[, withPreview]] = steamMod({ name: 'Pickle', workshopId: '123', previewfile: '/p.png' });
+  const [[, withPreview]] = steamMod({ name: 'Pickle', workshopId: '123', title: 'Pickle', previewfile: '/p.png' });
   assert.equal(withPreview.mods[0].previewfile, '/p.png');
 });
 
@@ -89,14 +89,21 @@ test('workshop tags come from the declared versions, so a new one needs no code 
 
 test('a mod can override the derived tags', () => {
   clearRefsEnv();
-  const cfg = releaseConfig({ ...base, mods: [{ name: 'X', workshopId: '1', tags: ['Mod', '1.6'] }] });
+  const cfg = releaseConfig({ ...base, mods: [{ name: 'X', workshopId: '1', title: 'X', tags: ['Mod', '1.6'] }] });
   const [, opts] = cfg.plugins.find((p) => Array.isArray(p) && p[0] === 'semantic-release-steam');
 
   assert.deepEqual(opts.mods[0].tags, ['Mod', '1.6']);
 });
 
+test('a mod with no title is refused, since a localized template cannot publish without one', () => {
+  assert.throws(() => steamMod({ name: 'Pickle', workshopId: '123' }), /title is required \(mod "Pickle"\)/);
+
+  const [[, opts]] = steamMod({ name: 'Pickle', workshopId: '123', title: 'Pickle: gherkin tests' });
+  assert.equal(opts.mods[0].title, 'Pickle: gherkin tests');
+});
+
 test('no tags given to steamMod leaves the key off, so the item keeps its own', () => {
-  const [[, opts]] = steamMod({ name: 'Pickle', workshopId: '123' });
+  const [[, opts]] = steamMod({ name: 'Pickle', workshopId: '123', title: 'Pickle' });
   assert.equal('tags' in opts.mods[0], false);
 });
 
@@ -147,7 +154,7 @@ test('one version with GameManagedDir is still allowed', () => {
 const base = {
   solution: 'X.slnx',
   versions: ['1.5', '1.6'],
-  mods: [{ name: 'X', workshopId: '1' }],
+  mods: [{ name: 'X', workshopId: '1', title: 'X' }],
 };
 
 test('the prepare order builds before it stamps, and stamps before it zips', () => {
