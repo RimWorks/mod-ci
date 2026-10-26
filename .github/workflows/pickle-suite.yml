@@ -225,7 +225,7 @@ jobs:
     needs: sets
     if: inputs.game-image == ''
     # pinned rather than ./ so the call cannot resolve against a consumer's own game-image.yml
-    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v5
     permissions:
       contents: read
       packages: write
@@ -288,7 +288,7 @@ jobs:
       - name: Stage game assemblies
         id: refs
         if: inputs.build-command != ''
-        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v5
         with:
           image: ${{ inputs.game-image != '' && inputs.game-image || fromJSON(needs.game-image.outputs.image-refs || '{}')[inputs.game-version] }}
 
@@ -299,7 +299,7 @@ jobs:
           GameManagedDir: ${{ steps.refs.outputs.managed-dir }}
         run: ${{ inputs.build-command }}
 
-      - uses: RimWorks/mod-ci/.github/actions/pickle-run@v4
+      - uses: RimWorks/mod-ci/.github/actions/pickle-run@v5
         with:
           game-image: ${{ inputs.game-image != '' && inputs.game-image || fromJSON(needs.game-image.outputs.image-refs || '{}')[inputs.game-version] }}
           mod-name: ${{ inputs.mod-name }}
