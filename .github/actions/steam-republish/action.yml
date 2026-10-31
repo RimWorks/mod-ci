@@ -9,7 +9,7 @@ inputs:
     description: Base64 of a logged-in config.vdf, so steamcmd needs no password
     required: true
   workshop-id:
-    description: Overrides the id baked into the repo's bump script
+    description: Overrides the id the repo's release.config.mjs declares
     default: ''
   verified-rimworld:
     description: Resolved RimWorld ref, quoted in the changenote

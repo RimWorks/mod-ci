@@ -17,7 +17,7 @@ The caller does its own checkout, because Sonar needs the full history to scope 
         with:
           fetch-depth: 0
 
-      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v4
+      - uses: RimWorks/mod-ci/.github/actions/dotnet-sonar@v5
         with:
           solution: Quickstarts.slnx
           project-key: RimWorks_Rimworld-Quickstarts
@@ -53,7 +53,7 @@ beside them. `dotnet-build` calls it once per matrix leg, so use it directly onl
 builds a mod outside that workflow.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+      - uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v5
         id: refs
         with:
           image: ${{ needs.image-16.outputs.image-ref }}
@@ -73,7 +73,7 @@ Installs SteamCMD and restores a logged-in `config.vdf`. It exports `STEAMCMD_PA
 its own Steam step.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/steam-login@v4
+      - uses: RimWorks/mod-ci/.github/actions/steam-login@v5
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
@@ -97,7 +97,7 @@ Pushes an already-built mod to its Steam Workshop item. Used by `weekly-verify`,
 verifies against the current RimWorld and republishes with no code changes.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/steam-republish@v4
+      - uses: RimWorks/mod-ci/.github/actions/steam-republish@v5
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
@@ -105,8 +105,8 @@ verifies against the current RimWorld and republishes with no code changes.
           verified-tests: ${{ env.TESTS_PASSED }}
 ```
 
-The repo's `scripts/workshop-bump.mjs` reads `WORKSHOP_ID` and falls back to the id hard-coded in the
-script, so `workshop-id` is only needed to point a run at a different item.
+The `workshop-bump` CLI reads `WORKSHOP_ID` first. Without it, the CLI takes the Workshop id from the
+repo's `release.config.mjs`. Set `workshop-id` only to point a run at a different item.
 
 ## `gate`
 
@@ -120,7 +120,7 @@ check name that never moves.
     needs: [prose, links, images, build, quickstart]
     runs-on: ubuntu-latest
     steps:
-      - uses: RimWorks/mod-ci/.github/actions/gate@v4
+      - uses: RimWorks/mod-ci/.github/actions/gate@v5
         with:
           results: ${{ join(needs.*.result, ' ') }}
 ```
@@ -161,7 +161,7 @@ for the event.
       - name: Run semantic-release
         run: ./node_modules/.bin/semantic-release
 
-      - uses: RimWorks/mod-ci/.github/actions/discord-release@v4
+      - uses: RimWorks/mod-ci/.github/actions/discord-release@v5
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           mod-name: Pickle
@@ -194,7 +194,7 @@ Use it when a job launches the game itself. [Quickstarts][qs] runs a quickstart 
 than a Pickle suite, and needs the staging without the runner.
 
 ```yaml
-      - uses: RimWorks/mod-ci/.github/actions/stage-mods@v4
+      - uses: RimWorks/mod-ci/.github/actions/stage-mods@v5
         with:
           mods-dir: ${{ runner.temp }}/mods
           config-dir: ${{ runner.temp }}/config

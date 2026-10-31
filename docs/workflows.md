@@ -34,7 +34,7 @@ install on a hit.
 
 ```yaml
   assetbundles:
-    uses: RimWorks/mod-ci/.github/workflows/assetbundles.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/assetbundles.yml@v5
     with:
       mods: |
         CosmereCore
@@ -77,7 +77,7 @@ on:
 
 jobs:
   analyze:
-    uses: RimWorks/mod-ci/.github/workflows/codeql.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/codeql.yml@v5
     permissions:
       contents: read
       security-events: write
@@ -98,7 +98,7 @@ on: pull_request_target
 
 jobs:
   automerge:
-    uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/dependabot-automerge.yml@v5
 ```
 
 ## `dotnet-build`
@@ -112,7 +112,7 @@ map. So the caller calls it once per version and composes the `game-images` pair
 ```yaml
 jobs:
   image-15:
-    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v5
     permissions:
       contents: read
       packages: write
@@ -122,7 +122,7 @@ jobs:
     secrets: inherit
 
   image-16:
-    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v5
     permissions:
       contents: read
       packages: write
@@ -133,7 +133,7 @@ jobs:
 
   build:
     needs: [image-15, image-16]
-    uses: RimWorks/mod-ci/.github/workflows/dotnet-build.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/dotnet-build.yml@v5
     permissions:
       contents: read
       checks: write
@@ -159,7 +159,7 @@ so a caller writes one job however many versions it needs.
 
 ```yaml
 images:
-  uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v4
+  uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v5
   permissions:
     contents: read
     packages: write
@@ -203,7 +203,7 @@ that restores such a package gets every game type twice and fails with CS0433.
 
 ```yaml
 package-deps:
-  uses: RimWorks/mod-ci/.github/workflows/package-deps.yml@v4
+  uses: RimWorks/mod-ci/.github/workflows/package-deps.yml@v5
   permissions:
     contents: read
     packages: read
@@ -228,7 +228,7 @@ folder is renamed.
 
 ```yaml
   links:
-    uses: RimWorks/mod-ci/.github/workflows/links.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/links.yml@v5
     with:
       args: --config lychee.toml --no-progress README.md docs/
 ```
@@ -255,7 +255,7 @@ the same repo usually needs them.
 
 ```yaml
   dashboard:
-    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/node-build.yml@v5
     with:
       working-directory: Dashboard
       lint: true
@@ -271,7 +271,7 @@ it depends on. It then runs the features in a container and reads pass or fail o
 
 ```yaml
   suite:
-    uses: RimWorks/mod-ci/.github/workflows/pickle-suite.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/pickle-suite.yml@v5
     permissions:
       contents: read
       packages: write
@@ -370,7 +370,7 @@ run that will not release the same commit twice.
   publish:
     needs: release
     if: needs.release.outputs.published == 'true'
-    uses: RimWorks/mod-ci/.github/workflows/publish.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/publish.yml@v5
     permissions:
       contents: read
     secrets: inherit
@@ -458,7 +458,7 @@ after it, such as a docs catalogue check.
 
 ```yaml
   prose:
-    uses: RimWorks/mod-ci/.github/workflows/prose.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/prose.yml@v5
 ```
 
 A multi-version mod runs the `verify-ship-list` CLI in `prepareCmd`, after the last
@@ -475,7 +475,7 @@ something first.
 ```yaml
   sonar:
     needs: image
-    uses: RimWorks/mod-ci/.github/workflows/sonar.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/sonar.yml@v5
     with:
       solution: RimWorks.RimLogging.sln
       project-key: RimWorks_rimworld-logging-framework
@@ -517,7 +517,7 @@ where a scanner run does not need a build.
 
 ```yaml
   scan:
-    uses: RimWorks/mod-ci/.github/workflows/sonar-scan.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/sonar-scan.yml@v5
     with:
       project-key: RimWorks_your-repo
     secrets:
@@ -536,5 +536,5 @@ Installs Node 22 and runs `npm test`. It suits a plain Node repo with no build s
 
 ```yaml
   test:
-    uses: RimWorks/mod-ci/.github/workflows/test.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/test.yml@v5
 ```

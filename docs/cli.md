@@ -50,8 +50,10 @@ Stages the mod and pushes it to its Workshop item, with a fresh stamp.
 npx workshop-bump Pickle.slnx 3791648678
 ```
 
-The id can come from `WORKSHOP_ID` instead. It needs `STEAMCMD_PATH`, `STEAM_USERNAME` and
-`STEAM_CONFIG_VDF`, which the `steam-republish` action sets.
+The id can come from `WORKSHOP_ID` instead. Drop both and the command reads the
+`semantic-release-steam` options in the repo's `release.config.mjs`, which must declare exactly one
+Workshop id. It needs `STEAMCMD_PATH`, `STEAM_USERNAME` and `STEAM_CONFIG_VDF`, which the
+`steam-republish` action sets.
 
 ## `publish-steam`
 

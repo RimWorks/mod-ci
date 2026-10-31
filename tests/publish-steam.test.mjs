@@ -4,7 +4,8 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { findSteamPlugin, publishSteam, splitPublish, stageFromDir } from '../lib/publish-steam.mjs';
+import { declaredWorkshopIds, findSteamPlugin, publishSteam, splitPublish, stageFromDir } from '../lib/publish-steam.mjs';
+import { steamMod } from '../lib/release-config.mjs';
 
 const STEAM = 'semantic-release-steam';
 const EXEC = '@semantic-release/exec';
@@ -205,4 +206,19 @@ test('publishSteam requires a version and a branch', async () => {
     publishSteam({ configPath: 'release.config.mjs', version: '1.0.0' }),
     /branch is required/,
   );
+});
+
+test('a workshop id written by steamMod reads back out of the config', async () => {
+  const plugins = steamMod({ name: 'Pickle', workshopId: '3791648678', title: 'Pickle' });
+  const path = await configFile(`export default ${JSON.stringify({ plugins })};`);
+
+  assert.deepEqual(await declaredWorkshopIds({ configPath: path }), ['3791648678']);
+  assert.deepEqual(await declaredWorkshopIds({ configPath: path, branch: 'beta' }), []);
+});
+
+test('a config with no steam plugin declares no workshop ids', async () => {
+  const path = await configFile(`export default { plugins: ['@semantic-release/github'] };`);
+
+  assert.deepEqual(await declaredWorkshopIds({ configPath: path }), []);
+  await assert.rejects(declaredWorkshopIds({}), /configPath is required/);
 });
