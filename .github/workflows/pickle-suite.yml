@@ -119,6 +119,8 @@ on:
         required: false
       STEAM_CONFIG_VDF_B64:
         required: false
+      DEPOTDOWNLOADER_ACCOUNT_B64:
+        required: false
     outputs:
       report-artifact:
         description: Artifact holding the merged report, or empty when no leg reported.
@@ -225,13 +227,14 @@ jobs:
     needs: sets
     if: inputs.game-image == ''
     # pinned rather than ./ so the call cannot resolve against a consumer's own game-image.yml
-    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v4
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v5
     permissions:
       contents: read
       packages: write
     secrets:
       STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
       STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+      DEPOTDOWNLOADER_ACCOUNT_B64: ${{ secrets.DEPOTDOWNLOADER_ACCOUNT_B64 }}
     with:
       artifact-prefix: pickle-suite-image-ref
       branches: ${{ inputs.game-version }}=${{ inputs.game-branch }}

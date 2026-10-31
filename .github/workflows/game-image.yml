@@ -42,6 +42,8 @@ on:
         required: false
       STEAM_CONFIG_VDF_B64:
         required: false
+      DEPOTDOWNLOADER_ACCOUNT_B64:
+        required: false
     outputs:
       image-refs:
         description: >
@@ -109,6 +111,7 @@ jobs:
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+          depotdownloader-account: ${{ secrets.DEPOTDOWNLOADER_ACCOUNT_B64 }}
           branch: ${{ matrix.branch }}
           variant: linux
           aliases: ${{ matrix.version }}
@@ -161,6 +164,7 @@ jobs:
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+          depotdownloader-account: ${{ secrets.DEPOTDOWNLOADER_ACCOUNT_B64 }}
           branch: ${{ matrix.branch }}
           variant: windows
           aliases: ${{ matrix.version }}

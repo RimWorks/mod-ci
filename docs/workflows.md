@@ -194,7 +194,8 @@ the newest image built for that game version.
 
 The Steam app id and the file list come from the `rimworld` gamecrate plugin, not from an input.
 The plugin's `linux` variant is a runnable image. Its `linux-ref` variant is limited to the
-managed assemblies and `Version.txt`.
+managed assemblies and `Version.txt`. With a `DEPOTDOWNLOADER_ACCOUNT_B64` secret the game
+downloads with DepotDownloader, which skips the account's workshop subscriptions.
 
 ## `package-deps`
 
@@ -283,6 +284,7 @@ it depends on. It then runs the features in a container and reads pass or fail o
     secrets:
       STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
       STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+      DEPOTDOWNLOADER_ACCOUNT_B64: ${{ secrets.DEPOTDOWNLOADER_ACCOUNT_B64 }}
 ```
 
 | Input | Type | Default | What it does |
@@ -320,8 +322,9 @@ and the message from each failed scenario, go to the job summary instead.
 
 **Secrets.** `DOCBIN_TOKEN` when `publish-report` is true. `STEAM_USERNAME` and
 `STEAM_CONFIG_VDF_B64` when `game-image` is empty, because the workflow then builds the image
-itself. `GITHUB_TOKEN` is not declared and does not need to be: a called workflow reads it without
-a declaration.
+itself. `DEPOTDOWNLOADER_ACCOUNT_B64` makes that build download the game with DepotDownloader,
+which skips the account's workshop subscriptions. `GITHUB_TOKEN` is not declared and does not need
+to be: a called workflow reads it without a declaration.
 
 **Permissions.** The calling job grants `contents: read`, `packages: write` and `actions: read`.
 Write, not read, even when `game-image` names an image and the build is skipped: GitHub checks a
