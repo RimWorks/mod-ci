@@ -95,7 +95,7 @@ jobs:
   image:
     name: rimworld image ${{ matrix.version }}
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.legs) }}
@@ -145,7 +145,7 @@ jobs:
     name: rimworld windows image ${{ matrix.version }}
     needs: prepare
     if: inputs.windows
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.legs) }}
