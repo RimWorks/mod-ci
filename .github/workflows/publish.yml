@@ -107,6 +107,21 @@ jobs:
           steam-config-vdf-b64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
           steam-username: ${{ secrets.STEAM_USERNAME }}
 
+      - name: Read the release notes for the Workshop change note
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag != '' && inputs.tag || format('v{0}', inputs.version) }}
+        run: |
+          notes="$(gh release view "$TAG" --json body --jq .body 2>/dev/null || true)"
+          if [ -z "$notes" ]; then
+            echo "No GitHub release notes on $TAG, so the change note is the version alone."
+          fi
+          {
+            echo "RELEASE_NOTES<<__RELEASE_NOTES__"
+            printf '%s\n' "$notes"
+            echo "__RELEASE_NOTES__"
+          } >> "$GITHUB_ENV"
+
       - name: Publish to the Workshop
         env:
           RELEASE_VERSION: ${{ inputs.version }}
