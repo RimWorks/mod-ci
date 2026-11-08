@@ -34,6 +34,24 @@ export default releaseConfig({
 });
 ```
 
+## A mod inside a larger repo
+
+When the mod is not at the checkout root, name its directory twice. Pass `rootDir` to
+`releaseConfig`, so every command it emits runs there. Pass `workdir` to each reusable workflow you
+call, so each step runs there too.
+
+```js
+export default releaseConfig({
+  solution: 'Concord.RimWorld.slnx',
+  versions: declaredVersions(readFileSync('src/hosts/rimworld/loadFolders.xml', 'utf8')),
+  mods: [{ name: 'Concord', workshopId: 'YOUR_WORKSHOP_ID' }],
+  rootDir: 'src/hosts/rimworld',
+});
+```
+
+Both options default to `.`, the checkout root. The `loadFolders.xml` read is your line, not the
+library's, so point it at the mod directory yourself.
+
 ## Documentation
 
 | Page | What's in it |

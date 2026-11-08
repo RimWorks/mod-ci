@@ -3,6 +3,10 @@ name: dotnet build
 on:
   workflow_call:
     inputs:
+      workdir:
+        description: Directory of the mod inside the checkout. solution and artifact-paths are read under it.
+        type: string
+        default: '.'
       solution:
         description: Solution or project to build, for example Quickstarts.slnx
         type: string
@@ -97,6 +101,9 @@ jobs:
       contents: read
       checks: write
       packages: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.workdir }}
     steps:
       - uses: actions/checkout@v7
 
@@ -129,13 +136,29 @@ jobs:
           -p:GameVersion=${{ matrix.version }}
           "-p:${{ inputs.game-managed-property }}=${{ steps.refs.outputs.managed-dir }}"
 
+      - name: Resolve the artifact paths under workdir
+        id: artifacts
+        if: inputs.artifact-name != ''
+        env:
+          WORKDIR: ${{ inputs.workdir }}
+          PATHS: ${{ inputs.artifact-paths }}
+        run: |
+          set -euo pipefail
+          prefix="${WORKDIR%/}"
+          {
+            echo 'paths<<__PATHS__'
+            printf '%s\n' "$PATHS" | tr -d '\r' | sed '/^[[:space:]]*$/d' |
+              sed "s#^\(!\?\)#\1$prefix/#"
+            echo '__PATHS__'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload build output
         if: inputs.artifact-name != ''
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact-name }} ${{ matrix.version }}
           if-no-files-found: error
-          path: ${{ inputs.artifact-paths }}
+          path: ${{ steps.artifacts.outputs.paths }}
 
       - name: Run tests
         if: inputs.test

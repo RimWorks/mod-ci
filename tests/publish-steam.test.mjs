@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { declaredWorkshopIds, findSteamPlugin, publishSteam, splitPublish, stageFromDir } from '../lib/publish-steam.mjs';
+import { declaredWorkshopIds, findSteamPlugin, publishPaths, publishSteam, splitPublish, stageFromDir } from '../lib/publish-steam.mjs';
 import { steamMod } from '../lib/release-config.mjs';
 
 const STEAM = 'semantic-release-steam';
@@ -206,6 +206,54 @@ test('publishSteam requires a version and a branch', async () => {
     publishSteam({ configPath: 'release.config.mjs', version: '1.0.0' }),
     /branch is required/,
   );
+});
+
+test('a mod under rootDir stages from its own directory, and the root stages nothing', async () => {
+  const path = await configFile(
+    `export default { plugins: [['semantic-release-steam', { mods: [{ name: 'Concord', path: 'x' }] }]] };`,
+  );
+
+  let stage;
+  await publishSteam({
+    configPath: path,
+    version: '2.0.0',
+    branch: 'main',
+    cwd: '/repo',
+    stageDir: '/tmp/zips',
+    publish: (_config, context) => {
+      stage = context.stageModContent;
+    },
+  });
+
+  assert.equal(stage({ modPath: 'x' }), '/tmp/zips/Concord');
+  assert.throws(() => stage({ modPath: '.' }), /no staged copy/);
+});
+
+test('--root moves the config lookup and leaves the staging directory at the cwd', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'publish-root-'));
+  await mkdir(join(root, 'x'));
+  await writeFile(
+    join(root, 'x', 'release.config.mjs'),
+    `export default { plugins: [['semantic-release-steam', { mods: [{ name: 'Concord', path: 'x' }] }]] };`,
+  );
+
+  const paths = publishPaths({ root: 'x', cwd: root });
+  assert.equal(paths.configPath, join(root, 'x', 'release.config.mjs'));
+  assert.equal(paths.cwd, root);
+
+  let stage;
+  await publishSteam({
+    ...paths,
+    version: '2.0.0',
+    branch: 'main',
+    stageDir: '/tmp/zips',
+    publish: (_config, context) => {
+      stage = context.stageModContent;
+    },
+  });
+
+  assert.equal(stage({ modPath: join(root, 'x') }), '/tmp/zips/Concord');
+  assert.throws(() => stage({ modPath: join(root, 'x', 'x') }), /no staged copy/);
 });
 
 test('a workshop id written by steamMod reads back out of the config', async () => {

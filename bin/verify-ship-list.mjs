@@ -1,7 +1,14 @@
 #!/usr/bin/env node
+import { parseArgs } from 'node:util';
+
 import { versionFolderMismatch } from '../lib/ship-list.mjs';
 
-const root = process.argv[2] ?? process.cwd();
+const { values, positionals } = parseArgs({
+  options: { root: { type: 'string' } },
+  allowPositionals: true,
+});
+
+const root = values.root ?? positionals[0] ?? process.cwd();
 
 let result;
 try {

@@ -63,8 +63,14 @@ export default releaseConfig({
 | `packOut` | string | `artifacts` | Output directory for the package. |
 | `nupkgGlob` | string | none | Package to push. Without it the release publishes nothing to NuGet. |
 | `assets` | object[] | `[]` | Files to attach to the GitHub release. |
+| `rootDir` | string | `.` | Directory of the mod inside the checkout. Every emitted command runs there, `assets` paths resolve under it, and the Steam plugin stages it. |
 
 An empty `workshopId` drops the Steam plugin, so a mod without a Workshop item still releases.
+
+A `rootDir` other than `.` prefixes `prepareCmd` and `publishCmd` with one `cd`, and it is the
+`path` the Steam plugin stages. `rootDir` is always relative to the checkout root, because every
+flow evaluates the config there. The release job runs the plugin from the checkout root, and the
+`publish` workflow runs `publish-steam` from the same place. Both upload the same directory.
 
 Workshop tags default to `Mod` plus every declared version, so a new game version needs no code
 change. A mod entry can set its own `tags` to override that. Tags replace the item's whole tag

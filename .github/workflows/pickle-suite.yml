@@ -3,6 +3,10 @@ name: pickle suite
 on:
   workflow_call:
     inputs:
+      workdir:
+        description: Directory of the mod inside the checkout. build-command and build-artifacts run under it.
+        type: string
+        default: '.'
       mod-name:
         description: Mod name from About.xml, spaces included. Names the mount and is the default suite filter.
         type: string
@@ -12,7 +16,7 @@ on:
         type: string
         required: true
       mod-dirs:
-        description: "Newline list of checkout-path:MountName. Empty mounts the repo root as mod-name."
+        description: "Newline list of checkout-path:MountName, read from the checkout root. Empty mounts workdir as mod-name."
         type: string
         default: ''
       suite-filter:
@@ -256,6 +260,9 @@ jobs:
       matrix: ${{ fromJSON(needs.sets.outputs.matrix) }}
     env:
       REPORT_DIR: ${{ github.workspace }}/pickle-reports
+    defaults:
+      run:
+        working-directory: ${{ inputs.workdir }}
     steps:
       - uses: actions/checkout@v7
 
@@ -307,7 +314,7 @@ jobs:
           game-image: ${{ inputs.game-image != '' && inputs.game-image || fromJSON(needs.game-image.outputs.image-refs || '{}')[inputs.game-version] }}
           mod-name: ${{ inputs.mod-name }}
           mod-package-id: ${{ inputs.mod-package-id }}
-          mod-dirs: ${{ inputs.mod-dirs }}
+          mod-dirs: ${{ (inputs.mod-dirs == '' && inputs.workdir != '.') && format('{0}:{1}', inputs.workdir, inputs.mod-name) || inputs.mod-dirs }}
           backend: ${{ matrix.set.backend }}
           game-version: ${{ inputs.game-version }}
           staged-mods: ${{ matrix.set.staged }}

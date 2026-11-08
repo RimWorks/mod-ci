@@ -26,6 +26,29 @@ these has to grant the scopes at each hop.
 | `sonar-scan` | `contents: read` |
 | `test` | `contents: read` |
 
+## A mod inside a larger repo
+
+`dotnet-build`, `publish` and `pickle-suite` take a `workdir` input, the directory of the mod inside
+the checkout. It defaults to `.`, the checkout root, so a repo whose mod is at the root passes
+nothing. Set it and every step in those workflows runs in that directory:
+
+```yaml
+    with:
+      workdir: src/hosts/rimworld
+      solution: Concord.RimWorld.slnx
+```
+
+Read the path inputs as relative to `workdir`. That covers `solution`, `artifact-paths`,
+`release-config` and `build-command`. One input stays relative to the checkout root, because it can
+name a directory outside the mod: `pickle-suite`'s `mod-dirs`. `publish` expects `package.json` and
+the release config inside `workdir`, because the `steam` job installs the publish tooling there. The
+job runs that tooling from the checkout root with `--root <workdir>`, so the Workshop upload stages
+the directory the config names.
+
+`node-build` takes the same thing under the name `working-directory`. The other reusable workflows
+take no `workdir`. `sonar` runs its build inside the `dotnet-sonar` composite action, which a job
+default cannot reach, so that caller passes a `solution` path from the checkout root.
+
 ## `assetbundles`
 
 Builds Unity asset bundles for every mod directory you name, then uploads one zip per mod. The
@@ -289,9 +312,10 @@ it depends on. It then runs the features in a container and reads pass or fail o
 
 | Input | Type | Default | What it does |
 |---|---|---|---|
-| `mod-name` | string | required | Mod name from `About.xml`, spaces included. Names the repo-root mount and is the default filter |
+| `workdir` | string | `.` | Directory of the mod inside the checkout. `build-command` and `build-artifacts` run there |
+| `mod-name` | string | required | Mod name from `About.xml`, spaces included. Names the default mount and is the default filter |
 | `mod-package-id` | string | required | Newline list of the caller's `packageId` values, written last in `ModsConfig.xml` |
-| `mod-dirs` | string | `''` | Newline list of `checkout-path:MountName`. Empty mounts the repo root as `mod-name` |
+| `mod-dirs` | string | `''` | Newline list of `checkout-path:MountName`, read from the checkout root. Empty mounts `workdir` as `mod-name` |
 | `game-image` | string | `''` | Image to pull and run. Empty builds one from `game-branch` |
 | `game-branch` | string | `''` | Steam branch the image job downloads, such as `version-1.6.4871` |
 | `game-image-name` | string | `''` | Repository the image job pushes to. Empty uses `ghcr.io/<owner>/rimworld-game`. Only read when `game-image` is empty |

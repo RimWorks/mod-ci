@@ -185,6 +185,85 @@ test('missing pieces are errors rather than a config that releases nothing', () 
   assert.throws(() => releaseConfig({ ...base, mods: [] }), /at least one mod/);
 });
 
+const execOf = (cfg) =>
+  cfg.plugins.find((p) => Array.isArray(p) && p[0] === '@semantic-release/exec')[1];
+
+test('rootDir runs every emitted command under the mod directory', () => {
+  clearRefsEnv();
+  const cfg = releaseConfig({
+    ...base,
+    rootDir: 'src/hosts/rimworld',
+    nupkgGlob: 'artifacts/*.nupkg',
+    assets: ['dist/X-*.zip', { path: 'dist/notes.md', label: 'notes' }],
+  });
+  const exec = execOf(cfg);
+  const github = cfg.plugins.find((p) => Array.isArray(p) && p[0] === '@semantic-release/github')[1];
+
+  assert.ok(exec.prepareCmd.startsWith('cd src/hosts/rimworld && '));
+  assert.equal(exec.prepareCmd.split('cd src/hosts/rimworld').length, 2);
+  assert.ok(exec.publishCmd.startsWith('cd src/hosts/rimworld && '));
+  assert.deepEqual(github.assets, [
+    'src/hosts/rimworld/dist/X-*.zip',
+    { path: 'src/hosts/rimworld/dist/notes.md', label: 'notes' },
+  ]);
+});
+
+test('the default rootDir emits the commands and assets unchanged', () => {
+  clearRefsEnv();
+  const opts = { ...base, nupkgGlob: 'artifacts/*.nupkg', assets: ['dist/X-*.zip'] };
+  const plain = releaseConfig(opts);
+  const dotted = releaseConfig({ ...opts, rootDir: '.' });
+
+  assert.equal(execOf(plain).prepareCmd, execOf(dotted).prepareCmd);
+  assert.equal(execOf(plain).prepareCmd.includes('cd '), false);
+  assert.equal(execOf(plain).publishCmd.includes('cd '), false);
+  assert.deepEqual(
+    plain.plugins.find((p) => Array.isArray(p) && p[0] === '@semantic-release/github')[1].assets,
+    ['dist/X-*.zip'],
+  );
+});
+
+const steamOf = (cfg) =>
+  cfg.plugins.find((p) => Array.isArray(p) && p[0] === 'semantic-release-steam')[1];
+
+test('rootDir is the path the steam plugin stages', () => {
+  clearRefsEnv();
+  const cfg = releaseConfig({ ...base, rootDir: 'src/hosts/rimworld' });
+
+  assert.equal(steamOf(cfg).mods[0].path, 'src/hosts/rimworld');
+});
+
+test('the default rootDir emits the same steam tuple as v5', () => {
+  clearRefsEnv();
+  const expected = [
+    [
+      'semantic-release-steam',
+      {
+        appId: '294100',
+        branchTargets: { main: 'stable' },
+        mods: [
+          {
+            name: 'Pickle',
+            path: '.',
+            title: 'Pickle',
+            workshopIds: { stable: '3791648678' },
+            tags: ['Mod', '1.6'],
+          },
+        ],
+      },
+    ],
+  ];
+  const mod = { name: 'Pickle', workshopId: '3791648678', title: 'Pickle' };
+
+  for (const rootDir of [undefined, '.']) {
+    const cfg = releaseConfig({ ...base, versions: ['1.6'], mods: [mod], rootDir });
+    assert.deepEqual(
+      cfg.plugins.filter((p) => Array.isArray(p) && p[0] === 'semantic-release-steam'),
+      expected,
+    );
+  }
+});
+
 test('the returned config is plain, so a repo can override what it does not cover', () => {
   const cfg = releaseConfig(base);
   const mine = { ...cfg, branches: ['next'] };

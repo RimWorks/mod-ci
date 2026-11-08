@@ -2,6 +2,11 @@
 
 Commands the package installs. A `release.config.mjs` and a workflow step both run them through `npx`.
 
+Every command except `discord-release` takes `--root <dir>`, the directory of the mod inside the
+checkout. It defaults to `.`, the current directory. Each command reads `loadFolders.xml`,
+`release.config.mjs` and the solution under it, and writes the stamp and the zip there too.
+`discord-release` takes no `--root`. It reads only environment variables and the paths they name.
+
 ## `package-mod`
 
 Builds the GitHub release zip. Run it after the build, in `prepareCmd`:
@@ -68,6 +73,10 @@ RELEASE_VERSION=3.1.3 RELEASE_BRANCH=main npx publish-steam
 The config path is the one argument and defaults to `release.config.mjs`. `RELEASE_BRANCH` falls
 back to `GITHUB_REF_NAME`, and it has to match a key in the plugin's `branchTargets` or nothing
 publishes.
+
+`--root` says where `package.json` and the config live. It does not move the directory the upload
+stages. That directory is the one the command runs in, plus each mod's `path` from the config. Run
+`publish-steam` from the checkout root, so a `rootDir` mod uploads its own directory.
 
 | Variable | What it does |
 | --- | --- |

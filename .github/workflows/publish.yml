@@ -3,6 +3,10 @@ name: publish
 on:
   workflow_call:
     inputs:
+      workdir:
+        description: Directory of the mod inside the checkout. It holds package.json and release-config.
+        type: string
+        default: '.'
       version:
         description: Version semantic-release just tagged, without a leading v.
         type: string
@@ -75,6 +79,9 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.workdir }}
     steps:
       - uses: actions/checkout@v7
 
@@ -82,6 +89,7 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: npm
+          cache-dependency-path: ${{ inputs.workdir }}/package-lock.json
 
       - name: Install publish dependencies
         run: npm ci --ignore-scripts
@@ -123,13 +131,16 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Publish to the Workshop
+        working-directory: .
         env:
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_BRANCH: ${{ inputs.branch }}
           RELEASE_STAGE_DIR: ${{ steps.stage.outputs.dir }}
           STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
           STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
-        run: ./node_modules/.bin/publish-steam "${{ inputs.release-config }}"
+        run: >-
+          "${{ inputs.workdir }}/node_modules/.bin/publish-steam"
+          --root "${{ inputs.workdir }}" "${{ inputs.release-config }}"
 
   discord:
     name: discord
