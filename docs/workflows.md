@@ -200,7 +200,7 @@ refs-only Elin image:
 
 ```yaml
 elin-image:
-  uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v6
+  uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v5
   permissions:
     contents: read
     packages: write
