@@ -1,6 +1,6 @@
 name: game image
 
-# Builds a RimWorld image from Steam and hands its ref to the caller. Pickle and Quickstarts
+# Builds a game image from Steam and hands its ref to the caller. Pickle and Quickstarts
 # each carried a verbatim copy of this before it moved here.
 
 on:
@@ -8,11 +8,22 @@ on:
     inputs:
       branches:
         description: >
-          Newline separated "<game version>=<steam branch>" pairs, one per version to build, so
-          a line reads "1.6=version-1.6.4871". Each leg is its own image, and the caller gets a
-          JSON map back rather than one ref it has to guess a version for.
+          Newline separated "<key>=<steam branch>" pairs, one per image to build. The key is a game
+          version or a plain name, so a line reads "1.6=version-1.6.4871" or "elin=public". Each
+          leg is its own image, and the caller gets a JSON map keyed by it rather than one ref it
+          has to guess a key for.
         type: string
         required: true
+      game:
+        description: Game to build. The action installs the matching @gamecrate plugin.
+        type: string
+        default: rimworld
+      variant:
+        description: >
+          Image variant to build. gamecrate tags every variant "<key>-<variant>", and gives the
+          bare key only to the plugin's default variant.
+        type: string
+        default: linux
       image:
         description: >
           Repository to push to. Required and named by the caller, so no repo publishes an
@@ -47,8 +58,8 @@ on:
     outputs:
       image-refs:
         description: >
-          JSON object of game version to image ref, for example {"1.5":"ghcr.io/o/g:a"}. Feed it
-          straight to dotnet-build.yml's game-images.
+          JSON object of branches key to image ref for the chosen variant, for example
+          {"1.5":"ghcr.io/o/g:a"}. Feed it straight to dotnet-build.yml's game-images.
         value: ${{ jobs.collect.outputs.image-refs }}
       windows-image-refs:
         description: The same map for the Windows images, empty unless windows was set.
@@ -77,9 +88,9 @@ jobs:
               line = raw.strip()
               if not line:
                   continue
-              hit = re.fullmatch(r"(\d+\.\d+)=(\S+)", line)
+              hit = re.fullmatch(r"(\d+\.\d+|[A-Za-z][A-Za-z0-9._-]*)=(\S+)", line)
               if hit is None:
-                  print(f'::error::branches line is not "<version>=<steam branch>": {line}', file=sys.stderr)
+                  print(f'::error::branches line is not "<version>=<steam branch>" or "<name>=<steam branch>": {line}', file=sys.stderr)
                   sys.exit(1)
               version, branch = hit.groups()
               if version in seen:
@@ -95,7 +106,7 @@ jobs:
           PY
 
   image:
-    name: rimworld image ${{ matrix.version }}
+    name: ${{ inputs.game }} image ${{ matrix.version }}
     needs: prepare
     runs-on: ubuntu-24.04
     strategy:
@@ -105,15 +116,16 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Build the RimWorld game image
+      - name: Build the ${{ inputs.game }} game image
         id: image
         uses: RimWorks/steam-game-image-action@v4
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
           depotdownloader-account: ${{ secrets.DEPOTDOWNLOADER_ACCOUNT_B64 }}
+          game: ${{ inputs.game }}
           branch: ${{ matrix.branch }}
-          variant: linux
+          variant: ${{ inputs.variant }}
           aliases: ${{ matrix.version }}
           image: ${{ inputs.image }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
@@ -122,20 +134,20 @@ jobs:
 
       - name: Record the ref for the collect job
         run: |
-          printf '{"kind":"linux","version":"%s","ref":"%s"}' \
+          printf '{"kind":"image","version":"%s","ref":"%s"}' \
             '${{ matrix.version }}' '${{ steps.image.outputs.image-ref }}' > "$RUNNER_TEMP/ref.json"
 
       - name: Publish this leg's ref
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ inputs.artifact-prefix }}-linux-${{ matrix.version }}
+          name: ${{ inputs.artifact-prefix }}-image-${{ matrix.version }}
           path: ${{ runner.temp }}/ref.json
           if-no-files-found: error
 
       - name: Report what was built
         run: |
           {
-            echo "## RimWorld game image ${{ matrix.version }}"
+            echo "## ${{ inputs.game }} game image ${{ matrix.version }}"
             echo
             echo "| field | value |"
             echo "| --- | --- |"
@@ -145,7 +157,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   image-windows:
-    name: rimworld windows image ${{ matrix.version }}
+    name: ${{ inputs.game }} windows image ${{ matrix.version }}
     needs: prepare
     if: inputs.windows
     runs-on: ubuntu-24.04
@@ -158,13 +170,14 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Build the RimWorld Windows game image
+      - name: Build the ${{ inputs.game }} Windows game image
         id: image
         uses: RimWorks/steam-game-image-action@v4
         with:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
           depotdownloader-account: ${{ secrets.DEPOTDOWNLOADER_ACCOUNT_B64 }}
+          game: ${{ inputs.game }}
           branch: ${{ matrix.branch }}
           variant: windows
           aliases: ${{ matrix.version }}
@@ -189,7 +202,7 @@ jobs:
       - name: Report what was built
         run: |
           {
-            echo "## RimWorld Windows game image ${{ matrix.version }}"
+            echo "## ${{ inputs.game }} Windows game image ${{ matrix.version }}"
             echo
             echo "| field | value |"
             echo "| --- | --- |"
@@ -220,15 +233,15 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os, pathlib, sys
 
-          maps = {"linux": {}, "windows": {}}
+          maps = {"image": {}, "windows": {}}
           for f in sorted(pathlib.Path("refs").rglob("*.json")):
               leg = json.loads(f.read_text())
               maps[leg["kind"]][leg["version"]] = leg["ref"]
 
-          if not maps["linux"]:
-              print(f"::error::no linux refs under prefix {os.environ['PREFIX']}. Another caller "
+          if not maps["image"]:
+              print(f"::error::no image refs under prefix {os.environ['PREFIX']}. Another caller "
                     "in this run may share it, which makes the artifacts collide", file=sys.stderr)
               sys.exit(1)
-          print(f"image-refs={json.dumps(maps['linux'], sort_keys=True)}")
+          print(f"image-refs={json.dumps(maps['image'], sort_keys=True)}")
           print(f"windows-image-refs={json.dumps(maps['windows'], sort_keys=True)}")
           PY
