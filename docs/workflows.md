@@ -177,8 +177,8 @@ reads as a malformed line and fails the same way.
 
 ## `game-image`
 
-Builds a RimWorld image per version from Steam and returns a map of them. It matrixes internally,
-so a caller writes one job however many versions it needs.
+Builds a game image per branch from Steam and returns a map of them. It builds RimWorld by
+default. It matrixes internally, so a caller writes one job however many versions it needs.
 
 ```yaml
 images:
@@ -195,16 +195,37 @@ images:
   secrets: inherit
 ```
 
+For a game with one branch, set `game`, `variant` and a plain name key. This call builds the
+refs-only Elin image:
+
+```yaml
+elin-image:
+  uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v6
+  permissions:
+    contents: read
+    packages: write
+  with:
+    artifact-prefix: ci-elin-ref
+    image: ghcr.io/your-org/elin-game
+    game: elin
+    variant: windows-ref
+    branches: elin=public
+  secrets: inherit
+```
+
 | Input | Default | What it does |
 | --- | --- | --- |
-| `branches` | required | Newline `<game version>=<steam branch>` pairs. One image per line. |
+| `branches` | required | Newline `<key>=<steam branch>` pairs. One image per line. The key is a game version, or a plain name such as `elin`. |
 | `artifact-prefix` | required | Names the per-leg ref artifacts. A shared prefix makes two calls in one run collide. |
 | `image` | required | Repository to push to. Name it, or the call fails before any image builds. |
 | `force` | `false` | Rebuilds even when the Steam buildid has not moved. |
 | `windows` | `false` | Also builds Windows images, under the Linux name plus `-windows`. |
+| `game` | `rimworld` | Builds the image for the gamecrate plugin `@gamecrate/<game>`. |
+| `variant` | `linux` | The gamecrate variant the main image job builds. Elin uses `windows-ref`. |
 
-`outputs.image-refs` is a JSON object of game version to image ref. Pass it straight to
-[`dotnet-build`](#dotnet-build) as `game-images`. Read one entry with
+`outputs.image-refs` is a JSON object of `branches` key to image ref, for any `variant`. When
+every key is a game version, pass it straight to [`dotnet-build`](#dotnet-build) as
+`game-images`. Read one entry with
 `fromJSON(needs.images.outputs.image-refs)['1.6']`.
 
 A malformed line, a repeated version or an empty list fails the `prepare` job before any image
@@ -215,10 +236,10 @@ Each leg also gets a short moving tag from its version, so `1.6=public` publishe
 `<image>:1.6` alongside the build-numbered tag. A consumer can pull the short ref and always get
 the newest image built for that game version.
 
-The Steam app id and the file list come from the `rimworld` gamecrate plugin, not from an input.
-The plugin's `linux` variant is a runnable image. Its `linux-ref` variant is limited to the
-managed assemblies and `Version.txt`. With a `DEPOTDOWNLOADER_ACCOUNT_B64` secret the game
-downloads with DepotDownloader, which skips the account's workshop subscriptions.
+The Steam app id and the file list come from the gamecrate plugin that `game` names, not from an
+input. For the `rimworld` plugin, the `linux` variant is a runnable image. Its `linux-ref` variant
+is limited to the managed assemblies and `Version.txt`. With a `DEPOTDOWNLOADER_ACCOUNT_B64`
+secret the game downloads with DepotDownloader, which skips the account's workshop subscriptions.
 
 ## `package-deps`
 
