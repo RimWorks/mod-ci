@@ -65,7 +65,7 @@ test('the suite job takes its runner from the input, so a gpu host stays reachab
 
   assert.match(job, /runs-on: \$\{\{ inputs\.runs-on \}\}/,
     'a hardcoded runner sends a vulkan game version back to software rendering');
-  assert.match(yaml, /^ {6}runs-on:\n {8}description:.+\n {8}type: string\n {8}default: ubuntu-latest$/m,
+  assert.match(yaml, /^ {6}runs-on:\n {8}description:.+\n {8}type: string\n {8}default: ubuntu-26.04$/m,
     'the input has to default to the hosted runner, or every existing caller changes behaviour');
 });
 
