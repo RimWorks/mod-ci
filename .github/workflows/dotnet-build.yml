@@ -60,7 +60,7 @@ jobs:
   # python, not jq: jq's capture() yields empty on a non-match and map() then drops the element,
   # which is the silent skip this job exists to prevent
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       legs: ${{ steps.list.outputs.legs }}
     steps:
@@ -93,7 +93,7 @@ jobs:
 
   build:
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.legs) }}

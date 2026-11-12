@@ -18,7 +18,7 @@ on:
       runner:
         description: Runner label, windows-latest for repos that need it
         type: string
-        default: ubuntu-latest
+        default: ubuntu-26.04
       dotnet-version:
         description: SDK to install
         type: string

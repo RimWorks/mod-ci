@@ -146,7 +146,7 @@ jobs:
     name: discord
     needs: [steam]
     if: always() && !failure() && !cancelled() && inputs.discord-mod-name != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:

@@ -71,7 +71,7 @@ permissions:
 jobs:
   prepare:
     name: legs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       legs: ${{ steps.parse.outputs.legs }}
     steps:
@@ -215,7 +215,7 @@ jobs:
     name: image refs
     needs: [prepare, image, image-windows]
     if: always() && needs.image.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       image-refs: ${{ steps.merge.outputs.image-refs }}
       windows-image-refs: ${{ steps.merge.outputs.windows-image-refs }}

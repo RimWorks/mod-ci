@@ -55,7 +55,7 @@ on:
       runs-on:
         description: "Runner label the suite legs take. A Vulkan game version only keeps pace on a host with a GPU."
         type: string
-        default: ubuntu-latest
+        default: ubuntu-26.04
       mod-sets:
         description: "JSON array of {name, backend, extraMods}. Replaces backends, and its legs report instead of gating."
         type: string
@@ -136,7 +136,7 @@ permissions:
 jobs:
   sets:
     name: read the sets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       matrix: ${{ steps.read.outputs.matrix }}
     steps:
@@ -378,7 +378,7 @@ jobs:
     name: merged report
     needs: suite
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       report-artifact: ${{ steps.merge.outcome == 'success' && 'merged-report' || '' }}
     steps:
