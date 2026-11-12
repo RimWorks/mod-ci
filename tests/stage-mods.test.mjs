@@ -31,7 +31,12 @@ for a in "$@"; do
   case "$a" in https://*) url="$a";; esac
   prev="$a"
 done
+[ -n "$CURL_LOG" ] && echo "$url" >> "$CURL_LOG"
 case "$url" in
+  *per_page*)
+    if [ -n "$RELEASES_JSON" ]; then printf '%s' "$RELEASES_JSON"; exit 0; fi
+    echo '[{"tag_name":"core-v0.32.0","draft":false,"prerelease":false},{"tag_name":"rimworld-v2.2.0","draft":true,"prerelease":false},{"tag_name":"rimworld-v2.1.0","draft":false,"prerelease":false}]'
+    exit 0;;
   *api.github.com*)
     echo '{"assets":[{"name":"Concord-1.zip","browser_download_url":"https://stub/Concord"},{"name":"HarmonyMod-1.zip","browser_download_url":"https://stub/Harmony"},{"name":"RimLogging-1.zip","browser_download_url":"https://stub/RimLogging"},{"name":"Pickle-1.zip","browser_download_url":"https://stub/Pickle"},{"name":"Quickstarts-1.zip","browser_download_url":"https://stub/Quickstarts"}]}'
     exit 0;;
@@ -194,4 +199,20 @@ test('refuses the same packageId pinned twice, where the second pin would silent
 test('refuses a workshop pin the mod under test already claims', async () => {
   assert.match(await stage({ WORKSHOP_MODS: 'RimWorks.Example:836308268' }),
     /is also staged from a checkout or a release/);
+});
+
+test('stages concord from the newest published rimworld release of the monorepo', async () => {
+  const log = join(await mkdtemp(join(tmpdir(), 'curl-log-')), 'urls');
+  const root = await stageFully({ CURL_LOG: log }, 'concord');
+  const urls = await readFile(log, 'utf8');
+
+  assert.match(urls, /repos\/ConcordLib\/Concord\/releases\/tags\/rimworld-v2\.1\.0$/m);
+  assert.ok(existsSync(join(root, 'mods', 'Concord', 'About', 'About.xml')));
+});
+
+test('refuses to stage concord when the monorepo has no rimworld release', async () => {
+  await assert.rejects(
+    stageFully({ RELEASES_JSON: '[{"tag_name":"core-v0.32.0","draft":false,"prerelease":false}]' }, 'concord'),
+    (err) => /ConcordLib\/Concord has no published rimworld-v\* release/.test(err.stderr),
+  );
 });

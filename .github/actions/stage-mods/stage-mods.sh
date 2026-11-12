@@ -153,6 +153,19 @@ gh_api() {
   fi
 }
 
+newest_release_ref() {
+  local repo="$1" prefix="$2" json
+  json="$(gh_api "https://api.github.com/repos/${repo}/releases?per_page=100")" ||
+    die "could not list the releases of ${repo}."
+  printf '%s' "$json" | TAG_PREFIX="$prefix" python3 -c 'import json, os, sys
+prefix = os.environ["TAG_PREFIX"]
+for r in json.load(sys.stdin):
+    if r["tag_name"].startswith(prefix) and not r["draft"] and not r["prerelease"]:
+        print("tags/" + r["tag_name"])
+        sys.exit(0)
+sys.exit(1)' || die "${repo} has no published ${prefix}* release"
+}
+
 # ref is 'latest' or 'tags/<tag>', the two release endpoints GitHub exposes.
 stage_release_zip() {
   local repo="$1" prefix="$2" dest="$3" ref="${4:-latest}" tmp json url inner bad
@@ -196,7 +209,8 @@ print(match[0]["browser_download_url"])')" ||
 # Concord first: PatchBackends prefers it when both are loaded.
 active=()
 if [[ "$BACKENDS" == "concord" || "$BACKENDS" == "both" ]]; then
-  stage_release_zip "ConcordLib/RimWorld" "Concord-" "$MODS_DIR/Concord"
+  concord_ref="$(newest_release_ref "ConcordLib/Concord" "rimworld-v")"
+  stage_release_zip "ConcordLib/Concord" "Concord-" "$MODS_DIR/Concord" "$concord_ref"
   active+=(concordlib.concord)
 fi
 
