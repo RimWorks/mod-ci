@@ -62,6 +62,13 @@ test('builds one command per version, each naming its own refs', () => {
   assert.ok(cmds.every((c) => c.includes(VERSION_ARGS)));
 });
 
+test('every build hands MinVer the release version, so the stamp matches the tag about to be cut', () => {
+  clearRefsEnv();
+  const cmds = buildVersions({ solution: 'Pickle.slnx', versions: ['1.5', '1.6'] });
+
+  assert.ok(cmds.every((c) => c.includes('-p:MinVerVersionOverride=${nextRelease.version}')));
+});
+
 test('an empty version list is an error rather than a build that ships nothing', () => {
   assert.throws(() => buildVersions({ solution: 'x.slnx', versions: [] }), /no versions/);
   assert.throws(() => buildVersions({ versions: ['1.6'] }), /solution is required/);
