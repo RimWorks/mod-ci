@@ -122,6 +122,7 @@ if [[ -n "$RUN_TIMEOUT" ]]; then
 fi
 args+=("${mod_refs[@]}")
 args+=(--docker-arg -e --docker-arg GC_DISABLE_INCREMENTAL=1)
+args+=(--docker-arg -e --docker-arg LD_PRELOAD=libX11.so.6)
 args+=(--docker-arg -v --docker-arg "$REPORT_DIR:/out")
 
 if [[ "$FILM_SECONDS" != "0" ]]; then
