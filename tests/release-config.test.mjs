@@ -127,6 +127,15 @@ test('the release rules cover the types that are shipped content', () => {
   assert.ok(MOD_RELEASE_RULES.every((r) => r.release === 'patch'));
 });
 
+test('a breaking commit of a shipped-content type cuts a major, not the patch its type asks for', () => {
+  clearRefsEnv();
+  const cfg = releaseConfig({ ...base, extraRules: [{ type: 'build', release: 'patch' }] });
+  const [, opts] = cfg.plugins.find((p) => Array.isArray(p) && p[0] === '@semantic-release/commit-analyzer');
+
+  assert.deepEqual(opts.releaseRules[0], { breaking: true, release: 'major' });
+  assert.deepEqual(opts.releaseRules.slice(1), [{ type: 'build', release: 'patch' }, ...MOD_RELEASE_RULES]);
+});
+
 test('a shared GameManagedDir across versions is refused, not silently reused', () => {
   clearRefsEnv();
   process.env.GameManagedDir = '/runner/game-1.6/Managed';
