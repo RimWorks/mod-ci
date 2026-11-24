@@ -180,6 +180,10 @@ reads as a malformed line and fails the same way.
 Builds a game image per branch from Steam and returns a map of them. It builds RimWorld by
 default. It matrixes internally, so a caller writes one job however many versions it needs.
 
+The image jobs share the `steam-login` concurrency group with `queue: max`. Only one of them
+signs in to Steam at a time in a repository, and the others show as pending. Several Steam
+sessions for one account at the same moment can sign that account out of other devices.
+
 ```yaml
 images:
   uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v5

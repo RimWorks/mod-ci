@@ -109,6 +109,9 @@ jobs:
     name: ${{ inputs.game }} image ${{ matrix.version }}
     needs: prepare
     runs-on: ubuntu-24.04
+    concurrency:
+      group: steam-login
+      queue: max
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.legs) }}
@@ -161,6 +164,9 @@ jobs:
     needs: prepare
     if: inputs.windows
     runs-on: ubuntu-24.04
+    concurrency:
+      group: steam-login
+      queue: max
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.legs) }}
