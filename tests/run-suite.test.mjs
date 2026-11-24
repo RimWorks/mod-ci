@@ -223,6 +223,14 @@ test('splits every docker-arg into its own flag, which is the only form docker a
   assert.equal(argv[mount - 2], '-v');
 });
 
+test('preloads libX11 in the container, so the nvidia vulkan driver can open the display', async () => {
+  const { argv } = await suite('linux', { UNFILTERED: 'true' });
+
+  const preload = argv.indexOf('LD_PRELOAD=libX11.so.6');
+  assert.ok(preload > 2, 'no LD_PRELOAD, so rimworld 1.7 renders on the cpu');
+  assert.deepEqual(argv.slice(preload - 3, preload), ['--docker-arg', '-e', '--docker-arg']);
+});
+
 test('refuses a ModsConfig id that no staged folder declares', async () => {
   const { code, stderr } = await suite('linux', { UNFILTERED: 'true' }, '0', [
     '<ModsConfigData><activeMods>',
